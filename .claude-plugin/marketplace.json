@@ -1,0 +1,14 @@
+{
+  "name": "combinatorial-agentic-development",
+  "owner": {
+    "name": "Daniel Nögel"
+  },
+  "plugins": [
+    {
+      "name": "combinatorial-agentic-development",
+      "description": "Plan every valid product variant from a decision space and build it as a stack of dependent merge requests.",
+      "source": "./",
+      "category": "development"
+    }
+  ]
+}

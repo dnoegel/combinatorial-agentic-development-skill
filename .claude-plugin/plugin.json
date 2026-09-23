@@ -1,0 +1,12 @@
+{
+  "name": "combinatorial-agentic-development",
+  "description": "Plan every valid product variant from a decision space and build it as a stack of dependent merge requests.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Daniel Nögel"
+  },
+  "homepage": "https://github.com/dnoegel/combinatorial-development-skill",
+  "repository": "https://github.com/dnoegel/combinatorial-development-skill",
+  "license": "MIT",
+  "keywords": ["planning", "variants", "feature-model", "pairwise", "stacked-prs", "merge-requests"]
+}

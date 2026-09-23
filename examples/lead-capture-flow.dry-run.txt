@@ -1,0 +1,96 @@
+# PREVIEW (plan not approved): Lead capture flow, 13 nodes, platform gitlab
+# Nothing below has been executed. Local steps are safe to run after approval;
+# push and MR commands need an explicit go from the engineer.
+
+git fetch origin
+
+# [1/13] base: Add lead capture flow foundation  (onto main)
+git switch -c lead-capture-flow/base origin/main
+git update-ref refs/cad/base/lead-capture-flow/base origin/main
+# implement base (cad.py brief <doc> base), run its tests, commit
+git push -u origin lead-capture-flow/base
+glab mr create --draft --source-branch lead-capture-flow/base --target-branch main --title 'Add lead capture flow foundation' --description "$(cat .cad/mr/lead-capture-flow__base.md)" --yes
+
+# [2/13] dim.channel: Add channel abstraction  (onto lead-capture-flow/base)
+git switch -c lead-capture-flow/channel lead-capture-flow/base
+git update-ref refs/cad/base/lead-capture-flow/channel lead-capture-flow/base
+# implement dim.channel (cad.py brief <doc> dim.channel), run its tests, commit
+git push -u origin lead-capture-flow/channel
+glab mr create --draft --source-branch lead-capture-flow/channel --target-branch lead-capture-flow/base --title 'Add channel abstraction' --description "$(cat .cad/mr/lead-capture-flow__channel.md)" --yes
+
+# [3/13] dim.email_capture: Add email capture abstraction  (onto lead-capture-flow/base)
+git switch -c lead-capture-flow/email-capture lead-capture-flow/base
+git update-ref refs/cad/base/lead-capture-flow/email-capture lead-capture-flow/base
+# implement dim.email_capture (cad.py brief <doc> dim.email_capture), run its tests, commit
+git push -u origin lead-capture-flow/email-capture
+glab mr create --draft --source-branch lead-capture-flow/email-capture --target-branch lead-capture-flow/base --title 'Add email capture abstraction' --description "$(cat .cad/mr/lead-capture-flow__email-capture.md)" --yes
+
+# [4/13] dim.pdf_delivery: Add PDF delivery abstraction  (onto lead-capture-flow/email-capture)
+git switch -c lead-capture-flow/pdf-delivery lead-capture-flow/email-capture
+git update-ref refs/cad/base/lead-capture-flow/pdf-delivery lead-capture-flow/email-capture
+# implement dim.pdf_delivery (cad.py brief <doc> dim.pdf_delivery), run its tests, commit
+git push -u origin lead-capture-flow/pdf-delivery
+glab mr create --draft --source-branch lead-capture-flow/pdf-delivery --target-branch lead-capture-flow/email-capture --title 'Add PDF delivery abstraction' --description "$(cat .cad/mr/lead-capture-flow__pdf-delivery.md)" --yes
+
+# [5/13] dim.crm_sync: Add CRM sync abstraction  (onto lead-capture-flow/base)
+git switch -c lead-capture-flow/crm-sync lead-capture-flow/base
+git update-ref refs/cad/base/lead-capture-flow/crm-sync lead-capture-flow/base
+# implement dim.crm_sync (cad.py brief <doc> dim.crm_sync), run its tests, commit
+git push -u origin lead-capture-flow/crm-sync
+glab mr create --draft --source-branch lead-capture-flow/crm-sync --target-branch lead-capture-flow/base --title 'Add CRM sync abstraction' --description "$(cat .cad/mr/lead-capture-flow__crm-sync.md)" --yes
+
+# [6/13] opt.channel.website: Channel: website  (onto lead-capture-flow/channel)
+git switch -c lead-capture-flow/channel-website lead-capture-flow/channel
+git update-ref refs/cad/base/lead-capture-flow/channel-website lead-capture-flow/channel
+# implement opt.channel.website (cad.py brief <doc> opt.channel.website), run its tests, commit
+git push -u origin lead-capture-flow/channel-website
+glab mr create --draft --source-branch lead-capture-flow/channel-website --target-branch lead-capture-flow/channel --title 'Channel: website' --description "$(cat .cad/mr/lead-capture-flow__channel-website.md)" --yes
+
+# [7/13] opt.channel.landing_page: Channel: landing page  (onto lead-capture-flow/channel)
+git switch -c lead-capture-flow/channel-landing-page lead-capture-flow/channel
+git update-ref refs/cad/base/lead-capture-flow/channel-landing-page lead-capture-flow/channel
+# implement opt.channel.landing_page (cad.py brief <doc> opt.channel.landing_page), run its tests, commit
+git push -u origin lead-capture-flow/channel-landing-page
+glab mr create --draft --source-branch lead-capture-flow/channel-landing-page --target-branch lead-capture-flow/channel --title 'Channel: landing page' --description "$(cat .cad/mr/lead-capture-flow__channel-landing-page.md)" --yes
+
+# [8/13] opt.channel.checkout: Channel: checkout  (onto lead-capture-flow/channel)
+git switch -c lead-capture-flow/channel-checkout lead-capture-flow/channel
+git update-ref refs/cad/base/lead-capture-flow/channel-checkout lead-capture-flow/channel
+# implement opt.channel.checkout (cad.py brief <doc> opt.channel.checkout), run its tests, commit
+git push -u origin lead-capture-flow/channel-checkout
+glab mr create --draft --source-branch lead-capture-flow/channel-checkout --target-branch lead-capture-flow/channel --title 'Channel: checkout' --description "$(cat .cad/mr/lead-capture-flow__channel-checkout.md)" --yes
+
+# [9/13] opt.pdf_delivery.email: PDF delivery: email  (onto lead-capture-flow/pdf-delivery)
+git switch -c lead-capture-flow/pdf-delivery-email lead-capture-flow/pdf-delivery
+git update-ref refs/cad/base/lead-capture-flow/pdf-delivery-email lead-capture-flow/pdf-delivery
+# implement opt.pdf_delivery.email (cad.py brief <doc> opt.pdf_delivery.email), run its tests, commit
+git push -u origin lead-capture-flow/pdf-delivery-email
+glab mr create --draft --source-branch lead-capture-flow/pdf-delivery-email --target-branch lead-capture-flow/pdf-delivery --title 'PDF delivery: email' --description "$(cat .cad/mr/lead-capture-flow__pdf-delivery-email.md)" --yes
+
+# [10/13] opt.pdf_delivery.download: PDF delivery: download  (onto lead-capture-flow/pdf-delivery)
+git switch -c lead-capture-flow/pdf-delivery-download lead-capture-flow/pdf-delivery
+git update-ref refs/cad/base/lead-capture-flow/pdf-delivery-download lead-capture-flow/pdf-delivery
+# implement opt.pdf_delivery.download (cad.py brief <doc> opt.pdf_delivery.download), run its tests, commit
+git push -u origin lead-capture-flow/pdf-delivery-download
+glab mr create --draft --source-branch lead-capture-flow/pdf-delivery-download --target-branch lead-capture-flow/pdf-delivery --title 'PDF delivery: download' --description "$(cat .cad/mr/lead-capture-flow__pdf-delivery-download.md)" --yes
+
+# [11/13] opt.email_capture.before_test: Email capture: before test  (onto lead-capture-flow/email-capture)
+git switch -c lead-capture-flow/email-capture-before-test lead-capture-flow/email-capture
+git update-ref refs/cad/base/lead-capture-flow/email-capture-before-test lead-capture-flow/email-capture
+# implement opt.email_capture.before_test (cad.py brief <doc> opt.email_capture.before_test), run its tests, commit
+git push -u origin lead-capture-flow/email-capture-before-test
+glab mr create --draft --source-branch lead-capture-flow/email-capture-before-test --target-branch lead-capture-flow/email-capture --title 'Email capture: before test' --description "$(cat .cad/mr/lead-capture-flow__email-capture-before-test.md)" --yes
+
+# [12/13] opt.email_capture.after_test: Email capture: after test  (onto lead-capture-flow/email-capture)
+git switch -c lead-capture-flow/email-capture-after-test lead-capture-flow/email-capture
+git update-ref refs/cad/base/lead-capture-flow/email-capture-after-test lead-capture-flow/email-capture
+# implement opt.email_capture.after_test (cad.py brief <doc> opt.email_capture.after_test), run its tests, commit
+git push -u origin lead-capture-flow/email-capture-after-test
+glab mr create --draft --source-branch lead-capture-flow/email-capture-after-test --target-branch lead-capture-flow/email-capture --title 'Email capture: after test' --description "$(cat .cad/mr/lead-capture-flow__email-capture-after-test.md)" --yes
+
+# [13/13] opt.crm_sync.hubspot: CRM sync: hubspot  (onto lead-capture-flow/crm-sync)
+git switch -c lead-capture-flow/crm-sync-hubspot lead-capture-flow/crm-sync
+git update-ref refs/cad/base/lead-capture-flow/crm-sync-hubspot lead-capture-flow/crm-sync
+# implement opt.crm_sync.hubspot (cad.py brief <doc> opt.crm_sync.hubspot), run its tests, commit
+git push -u origin lead-capture-flow/crm-sync-hubspot
+glab mr create --draft --source-branch lead-capture-flow/crm-sync-hubspot --target-branch lead-capture-flow/crm-sync --title 'CRM sync: hubspot' --description "$(cat .cad/mr/lead-capture-flow__crm-sync-hubspot.md)" --yes
