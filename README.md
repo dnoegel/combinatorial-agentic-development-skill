@@ -2,13 +2,19 @@
 
 **Why choose a product path when you can implement the whole decision space?**
 
-A skill for coding agents (Claude Code, Codex, anything that reads `SKILL.md`) for the feature where product has not decided yet. You tell the agent the open decisions. It counts every variant, throws out the impossible ones, builds each option exactly once behind a shared abstraction, and lays the work out as a stack of small merge requests. When the decisions change, and they will, it updates the plan and tells you which branches need a rebase.
+Agent assisted engineering changes the premises on which product teams operate: PRDs, feedback loops, decision cycles can take longer than the actual implementation. 
+An incident of "I created these branches as I tried to anticipate some final decisions" sparked a conversation around "implementing the whole decision tree". 
 
-Indecision, now with a dependency graph.
+So here we are. 
 
-## Thirty seconds of it
+## What this skill does
+You tell the agent the open decisions. It counts every variant, removes the impossible ones, builds each option exactly once behind a shared abstraction, and lays the work out as a stack of small merge requests. When the decisions change, and they will, it updates the plan and tells you which branches need a rebase.
 
-> **You:** Lead capture flow. It runs on the website, a landing page, or in checkout. The PDF report goes out by email, as a download, or not at all. We capture the email before the test, after it, or never. HubSpot sync is optional. PDF by email needs an address, obviously, and checkout can't ask before the test.
+That's combinatorial agentic development. 
+
+## How it might look like
+
+> **You:** Lead capture flow. It runs on the website, a landing page, **or** in checkout. The PDF report goes out by email, as a download, **or** not at all. We capture the email before the test, after it, **or** never. HubSpot sync is optional. PDF by email needs an address, obviously, and checkout can't ask before the test.
 
 The agent writes the spec, runs the numbers and reads them back before touching anything:
 
@@ -139,17 +145,6 @@ Then talk to your agent: *"Plan the decision space for the onboarding flow: ..."
 
 Every mode implements each option in scope once. Pairwise and t-wise shrink the test matrix, and the document says so in plain numbers ("32 of 42 valid variants are configurable but have no dedicated scenario"). Details: [modes](skills/combinatorial-agentic-development/references/modes.md).
 
-## Safeguards
-
-- Theoretical, removed and valid counts are shown before any work is proposed.
-- Enumeration is refused above `max_enumeration` (100,000 by default).
-- Configurable limits for variants, plan size and MRs per revision; exceeding one produces a menu of options and waits for you.
-- Contradictory constraints, dead options, constraints that never fire and redundant constraints are reported. For contradictions the tool names the constraints whose removal would fix them.
-- Pairwise and t-wise results are never presented as testing every product.
-- `stack` is a dry run. Pushes, MR creation, force-pushes and retargets happen only when you ask.
-- `verify` checks reality instead of reports: stale branches, conflicts when everything is merged, the test suite on the merged result, and a probe that proves every option of every variant actually reaches the product.
-- Branch names, commits and MR descriptions describe the work, with no tool or agent attribution.
-
 ## The spec
 
 ```yaml
@@ -198,54 +193,13 @@ $CAD restack docs/variants/lead-capture-flow.md --execute          # after amend
 $CAD mark docs/variants/lead-capture-flow.md base --status merged --mr '!4'
 ```
 
-## What we learned from a trial run
-
-We planned a personal homepage (tone, static or dynamic, guestbook, imprint, start page topic: 45 valid variants, 14 MRs) and let a small, cheap model implement the stack. It reported fourteen green branches and "no deviations". Three things were wrong:
-
-- The plugin loader looked in the wrong directory and the page composer was still a placeholder, so every variant rendered the same page. Each option was tested in isolation, so every test passed.
-- A commit landed on the base branch after its children branched, so three lanes were stale.
-- Parallel branches edited the same file; the conflicts were resolved in a throwaway merge and thrown away.
-
-The skill now closes each gap mechanically: a probe that must observe every selected option in every variant, `verify` for stale branches and integration conflicts, a warning when parallel nodes plan to touch the same file, and `brief` so a delegated model gets exact instructions and a rule to stop instead of improvising. The general lesson: when an agent says "done", ask a tool.
-
 ## FAQ
 
 **Does it really build all 42 products?** It builds every option once, behind interfaces, so all 42 are configurable. Which of them get a dedicated test scenario depends on the mode.
 
-**Why not use PICT or ACTS?** They are excellent at covering arrays. This skill needs exact counts, dead-option detection, a dependency graph and a document, all without installing anything, and a greedy cover over the enumerated valid variants is exact about constraints and fast at planning scale. A PICT backend for spaces too large to enumerate is on the roadmap.
-
 **Won't 13 MRs annoy my reviewers?** Each one is small and does one thing, and the limits ask before a plan grows past what you configured. `bundle: true` folds a dimension into a single MR.
 
-**Is this a joke?** The premise, a little. The counting, the constraint checks and the test suite are not.
-
-## Development
-
-```bash
-python3 -m unittest discover tests          # standard library only, uses git for verify tests
-python3 tests/examples_builder.py           # regenerate examples/ after changing output
-```
-
-The test suite checks the examples are current, validates JSON output against the schemas, cross-checks the YAML parser against PyYAML when it is installed, and fails if generated text contains em dashes or attribution.
-
-```text
-skills/combinatorial-agentic-development/
-  SKILL.md                  the workflow the agent follows
-  references/               spec format, document format, modes, stacking, verification, changes, JSON Schemas
-  scripts/cad.py            CLI entry point
-  scripts/cadlib/           parser, analysis, coverage, planning, stacking, rendering
-  agents/openai.yaml        Codex metadata
-tests/                      unit, constraint, coverage, stack, git and end-to-end tests
-evals/                      realistic prompts for evaluating the skill with an agent
-examples/                   generated planning documents and dry runs
-```
-
-## Roadmap
-
-- Execute stacks through `glab` and `gh`, including retargeting after merges and force-pushing restacked branches
-- Adapters for git-spice, Graphite, git-town and `glab stack`
-- PICT backend and SAT-based analysis for spaces too large to enumerate
-- A CI check that fails when a plan changed without a new sign-off
-- Mixed-strength coverage for risky dimensions
+**Is this a joke?** Absolutely. It is also a commentary on the rapidly changing software development industry, where the line between serious tooling and elaborate satire is becoming increasingly difficult to draw.
 
 ## License
 
