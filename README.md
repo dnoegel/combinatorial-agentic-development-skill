@@ -28,7 +28,7 @@ Implementation     13 nodes: 1 foundation, 4 abstractions, 8 options, 0 interact
 Stack              tree, 8 lanes, 1 wave
 
 Status  needs confirmation
-  - 42 targeted variants exceed max_valid_variants (20).
+  - 42 targeted variants exceed max_variants (20).
   Options: proceed as planned, switch the test matrix to pairwise, ...
 
 Product decisions made on your behalf: 0
@@ -91,7 +91,7 @@ Impact
   started work affected: none
 ```
 
-You say yes, the document gets revision 2 with a changelog entry, and your sign-off is cleared because the spec changed. See the full documents: [revision 1](examples/lead-capture-flow.md), [revision 2 with work in progress](examples/lead-capture-flow-r2.md), and the [dry-run output](examples/lead-capture-flow.dry-run.txt).
+You say yes, and the document gets revision 2 with a changelog entry. See the full documents: [revision 1](examples/lead-capture-flow.md), [revision 2 with work in progress](examples/lead-capture-flow-r2.md), and the [dry-run output](examples/lead-capture-flow.dry-run.txt).
 
 ## Install
 
@@ -122,16 +122,16 @@ Then talk to your agent: *"Plan the decision space for the onboarding flow: ..."
         ▼
  1. spec change, read back ──► 2. analyze (counts, findings) ──► 3. planning document
                                                                         │
-                                             engineer reviews and signs off (hash-bound)
+                                             engineer reviews and says go
                                                                         │
                                                                         ▼
                                5. branches in stack order  ◄──  4. dry-run stack
 ```
 
-- **The tool computes, the agent judges.** A dependency-free Python script does everything that must be exact: enumeration, constraint checks, dead options, coverage, dependency graph, stack placement, diagrams, approval hashes. The agent does what needs judgment: turning "emails can be HTML" into a spec change, spotting combinations that are valid but pointless, reading your repository to fill in files and guidance.
+- **The tool computes, the agent judges.** A dependency-free Python script does everything that must be exact: enumeration, constraint checks, dead options, coverage, dependency graph, stack placement, diagrams, restacks. The agent does what needs judgment: turning "emails can be HTML" into a spec change, spotting combinations that are valid but pointless, reading your repository to fill in files and guidance.
 - **Options become code, variants become tests.** One foundation, one abstraction per decision, one implementation per option, plus explicit interaction nodes where options need glue. No copied flows.
 - **One document per feature.** Front matter for state, your intent, the agent's review notes, the canonical spec, a generated plan, a changelog. It renders on GitHub and GitLab, Mermaid included.
-- **Two phases.** Planning ends with your sign-off, bound to a hash of the spec. Implementation refuses to start (`cad.py check`) when the plan changed since.
+- **Two phases.** Planning ends with your go in the conversation. No branch exists before that, and progress afterwards is read straight from git.
 - **Updates are first class.** Stable node ids, progress read from git, and started branches are never moved silently. When a decision changes the contract of a node that is already merged, the plan gets a follow-up node instead of a history rewrite. When the code of a node changes, `impact` shows the blast radius and `restack` rebases the whole subtree, parents first, replaying only each branch's own commits.
 
 ## Generation modes
@@ -173,7 +173,7 @@ generation:
   mode: pairwise
 ```
 
-You never have to write this yourself. Full reference: [spec format](skills/combinatorial-agentic-development/references/spec-format.md). Schemas: [spec](skills/combinatorial-agentic-development/references/spec.schema.json), [analysis output](skills/combinatorial-agentic-development/references/analysis.schema.json).
+You never have to write this yourself. Full reference: [spec format](skills/combinatorial-agentic-development/references/spec-format.md). Schema: [spec](skills/combinatorial-agentic-development/references/spec.schema.json).
 
 ## CLI
 
@@ -184,13 +184,11 @@ CAD="python3 skills/combinatorial-agentic-development/scripts/cad.py"
 $CAD analyze tests/fixtures/lead-capture-flow.yaml          # receipt, nothing written
 $CAD new docs/variants/lead-capture-flow.md --spec tests/fixtures/lead-capture-flow.yaml
 $CAD render docs/variants/lead-capture-flow.md --note "Initial plan."
-$CAD approve docs/variants/lead-capture-flow.md --by "Dana"
-$CAD stack docs/variants/lead-capture-flow.md --platform gitlab
+$CAD stack docs/variants/lead-capture-flow.md                # dry run, progress read from git
 $CAD brief docs/variants/lead-capture-flow.md --next         # instructions for the next node
 $CAD verify docs/variants/lead-capture-flow.md --integration --probe
 $CAD impact docs/variants/lead-capture-flow.md dim.email_capture   # what a change would touch
 $CAD restack docs/variants/lead-capture-flow.md --execute          # after amending a branch
-$CAD mark docs/variants/lead-capture-flow.md base --status merged --mr '!4'
 ```
 
 ## FAQ

@@ -2,13 +2,16 @@
 
 Layout (top to bottom):
 
-    front matter      machine-owned state: revision, status, sign-off, node progress
+    front matter      machine-owned: revision, spec hash, branch layout, planned follow-ups
     # Title           human-owned
     ## Intent         human-owned
     ## Review notes   agent-owned judgment (semantic findings, open questions)
     ## Spec           canonical ```yaml cad-spec block
     generated region  between cad:generated markers, rewritten by `render`
-    ## Changelog      newest first, appended by `render` and `approve`
+    ## Changelog      newest first, appended by `render`
+
+Progress (which branches exist, which are merged) is never stored here: it is
+read from git whenever it is needed.
 """
 
 import datetime
@@ -22,13 +25,12 @@ from . import plan as plan_mod
 from . import spec as spec_mod
 from . import verify as verify_mod
 
-__all__ = ["DocError", "read", "load_raw_spec", "create", "render", "approve", "check", "mark"]
+__all__ = ["DocError", "read", "load_raw_spec", "create", "render", "git_state"]
 
 GEN_START = "<!-- cad:generated:start (edit the spec above and run `cad.py render`; changes below this line are overwritten) -->"
 GEN_START_RE = re.compile(r"<!-- cad:generated:start.*?-->")
 GEN_END = "<!-- cad:generated:end -->"
 SPEC_RE = re.compile(r"^```ya?ml cad-spec[ \t]*\n(.*?)^```[ \t]*$", re.S | re.M)
-STATUSES = ("planned", "branched", "mr-open", "merged")
 CONTRACTS_RE = re.compile(r"\n*<!-- cad:contracts\n(.*?)\n-->\n?", re.S)
 TAGLINE = "_Why choose a product path when you can implement the whole decision space?_"
 
@@ -125,7 +127,7 @@ def create(path, feature, title=None, spec_text=None, intent=""):
         raise DocError(f"{path} already exists")
     title = title or spec_mod.humanize(feature)
     spec_text = (spec_text or STARTER_SPEC.format(feature=feature, title=title)).rstrip("\n")
-    front = {"cad": 1, "feature": feature, "revision": 0, "status": "draft"}
+    front = {"cad": 1, "feature": feature, "revision": 0}
     body = "\n".join([
         f"# {title}",
         "",
@@ -199,56 +201,57 @@ def _codes(ids):
     return ", ".join(f"`{i}`" for i in ids)
 
 
-def git_state(path, result, state):
-    """Recorded progress, upgraded with what git shows: branches that exist or are merged."""
-    folder = os.path.dirname(os.path.abspath(path))
-    out = {k: dict(v or {}) for k, v in state.items()}
-    if not gitops.is_repo(folder):
+def git_state(path, result, recorded=None, repo=None):
+    """Progress per node from git ({"status": planned|branched|merged}), plus the recorded `onto`."""
+    recorded = recorded or {}
+    out = {nid: {"onto": v.get("onto")} for nid, v in recorded.items() if v and v.get("onto")}
+    repo = repo or _repo_of(path)
+    if not repo:
         return out
     report = verify_mod.Report()
-    verify_mod.check_state(gitops.toplevel(folder), result.stack, report)
+    verify_mod.check_state(repo, result.stack, report)
     for nid, status in report.nodes.items():
-        recorded = out.setdefault(nid, {}).get("status", "planned")
-        if recorded == "planned" or (status == "merged" and recorded != "merged"):
-            out[nid]["status"] = status
+        out.setdefault(nid, {})["status"] = status
     return out
 
 
-def _contracts(result, prev_nodes, prev_contracts, state, followups, revision):
+def _repo_of(path):
+    folder = os.path.dirname(os.path.abspath(path))
+    return gitops.toplevel(folder) if gitops.is_repo(folder) else None
+
+
+def _contracts(result, prev_contracts, state, followups, revision):
     """Compare each started node's contract with its snapshot.
 
-    Returns (info per node, contract snapshots, new follow-ups, changelog lines).
+    Returns (contract snapshots, new follow-ups, changelog lines).
     """
-    info, snapshots, new_followups, log = {}, {}, [], []
+    snapshots, new_followups, log = {}, [], []
     for node in result.plan.nodes:
         if node.kind == "followup":
             continue
-        current = plan_mod.contract(node)
-        old = prev_nodes.get(node.id) or {}
         status = (state.get(node.id) or {}).get("status", "planned")
-        entry = {}
+        if status == "planned":
+            continue
+        current = plan_mod.contract(node)
         snapshot = prev_contracts.get(node.id)
-        if status != "planned":
-            if snapshot is None or snapshot == current:
-                snapshots[node.id] = current
-            else:
-                diff = [f"+ {l}" for l in current if l not in snapshot] + [f"- {l}" for l in snapshot if l not in current]
-                if status == "merged":
-                    fid = f"{node.id}.r{revision}"
-                    if not any(f.get("id") == fid for f in followups):
-                        new_followups.append({"id": fid, "of": node.id, "revision": revision, "changes": diff})
-                        log.append(f"  - Follow-up planned: `{fid}`, because `{node.id}` is merged and its contract changed.")
-                    snapshots[node.id] = current
-                else:
-                    snapshots[node.id] = snapshot
-                    entry["needs_update"] = diff
-                    if old.get("needs_update") != diff:
-                        log.append(f"  - Needs update: `{node.id}` is {status} and its contract changed; amend the branch, then restack its children.")
-        info[node.id] = entry
-    return info, snapshots, new_followups, log
+        snapshots[node.id] = current
+        if snapshot is None or snapshot == current:
+            continue
+        diff = [f"+ {l}" for l in current if l not in snapshot] + [f"- {l}" for l in snapshot if l not in current]
+        if status == "merged":
+            fid = f"{node.id}.r{revision}"
+            if not any(f.get("id") == fid for f in followups):
+                new_followups.append({"id": fid, "of": node.id, "revision": revision, "changes": diff})
+                log.append(f"  - Follow-up planned: `{fid}`, because `{node.id}` is merged and its contract changed.")
+        else:
+            log.append(
+                f"  - Changed after work started: `{node.id}` ({'; '.join(diff)}). "
+                "Amend its branch, then run `cad.py restack`."
+            )
+    return snapshots, new_followups, log
 
 
-def render(path, note=None, date=None, _force_status=None, _changelog=None):
+def render(path, note=None, date=None):
     """Regenerate the plan inside a document. Returns (result, changed)."""
     doc = read(path)
     raw, spec = _load(doc)
@@ -257,187 +260,82 @@ def render(path, note=None, date=None, _force_status=None, _changelog=None):
     prev_nodes = {k: dict(v or {}) for k, v in (front.get("nodes") or {}).items()}
     followups = [dict(f) for f in front.get("followups") or []]
     first = not front.get("revision")
-    known = None if first else set(prev_nodes)
-    result = engine.run(spec, known_nodes=known, state=prev_nodes, followups=followups)
+    result = engine.run(spec, followups=followups)
     if result.status == "error":
         return result, False
     live = git_state(path, result, prev_nodes)
-    if live != prev_nodes:
-        result = engine.run(spec, known_nodes=known, state=live, followups=followups)
+    if live:
+        result = engine.run(spec, state=live, followups=followups)
 
     changed = front.get("spec_hash") != h
     revision = int(front.get("revision") or 0) + (1 if changed else 0)
-    contract_info, snapshots, new_followups, contract_log = _contracts(
-        result, prev_nodes, doc.contracts or {}, live, followups, revision
-    )
+    snapshots, new_followups, contract_log = _contracts(result, doc.contracts or {}, live, followups, revision)
     if new_followups:
         followups += new_followups
-        result = engine.run(spec, known_nodes=known, state=live, followups=followups)
-    status = _force_status or front.get("status") or "draft"
-    approval = front.get("approved")
-    log = []
-    if changed or (approval and approval.get("hash") != h):
-        if status in ("approved", "implementing", "done") or approval:
-            if approval:
-                log.append("  - Sign-off cleared: the spec changed after approval.")
-            status = "draft"
-            approval = None
+        result = engine.run(spec, state=live, followups=followups)
 
-    state = {}
-    restacks = []
+    nodes, restacks = {}, []
     for nid in result.stack.order:
         p = result.stack.placements[nid]
-        old = prev_nodes.get(nid) or {}
-        entry = {"branch": p.branch, "onto": p.parent_branch, "status": live.get(nid, {}).get("status", "planned")}
-        entry.update(contract_info.get(nid, {}))
-        if old.get("mr"):
-            entry["mr"] = old["mr"]
-        restack_from = old.get("restack_from")
-        if entry["status"] not in ("planned", "merged") and old.get("onto") and old["onto"] != p.parent_branch:
-            restack_from = restack_from or old["onto"]
-        if restack_from and restack_from != p.parent_branch:
-            entry["restack_from"] = restack_from
-            if not old.get("restack_from"):
-                restacks.append(f"`{nid}` from `{restack_from}` onto `{p.parent_branch}`")
-        state[nid] = entry
-    obsolete = []
-    for nid, old in prev_nodes.items():
-        if nid in state:
-            continue
-        if (old or {}).get("status", "planned") != "planned":
-            kept = dict(old)
-            kept["obsolete"] = True
-            state[nid] = kept
-            if not old.get("obsolete"):
-                obsolete.append(nid)
+        nodes[nid] = {"branch": p.branch, "onto": p.parent_branch}
+        old_onto = prev_nodes.get(nid, {}).get("onto")
+        if (live.get(nid) or {}).get("status") == "branched" and old_onto and old_onto != p.parent_branch:
+            restacks.append(f"`{nid}` from `{old_onto}` onto `{p.parent_branch}`")
+    repo = _repo_of(path)
+    orphaned = [
+        nid for nid, old in prev_nodes.items()
+        if nid not in nodes and repo and old.get("branch") and gitops.branch_exists(repo, old["branch"])
+    ]
 
+    log = []
     if changed:
         prev_counts = front.get("counts") or {}
-        added = [n for n in result.stack.order if n not in prev_nodes]
-        removed = [n for n in prev_nodes if n not in result.plan.by_id and not (prev_nodes[n] or {}).get("obsolete")]
-        head = f"- **r{revision}** ({today(date)}): " + (note.strip() if note else ("Initial plan." if first else "Spec edited."))
-        lines = [head]
+        log.append(f"- **r{revision}** ({today(date)}): " + (note.strip() if note else ("Initial plan." if first else "Spec edited.")))
         if not first:
+            added = [n for n in result.stack.order if n not in prev_nodes]
+            removed = [n for n in prev_nodes if n not in nodes]
             if added:
-                lines.append(f"  - Added: {_codes(added)}.")
+                log.append(f"  - Added: {_codes(added)}.")
             if removed:
-                lines.append(f"  - Removed: {_codes(removed)}.")
-            deltas = []
-            for key, label in (("valid", "valid variants"), ("scenarios", "test scenarios"), ("nodes", "nodes")):
-                new_value = {
-                    "valid": len(result.space.valid),
-                    "scenarios": len(result.scenarios.variants),
-                    "nodes": len(result.plan.nodes),
-                }[key]
-                if prev_counts.get(key) is not None and prev_counts.get(key) != new_value:
-                    deltas.append(f"{label} {prev_counts[key]} to {new_value}")
+                log.append(f"  - Removed: {_codes(removed)}.")
+            now = {"valid": len(result.space.valid), "scenarios": len(result.scenarios.variants), "nodes": len(result.plan.nodes)}
+            deltas = [
+                f"{label} {prev_counts[key]} to {now[key]}"
+                for key, label in (("valid", "valid variants"), ("scenarios", "test scenarios"), ("nodes", "nodes"))
+                if prev_counts.get(key) is not None and prev_counts[key] != now[key]
+            ]
             if deltas:
-                lines.append(f"  - {'; '.join(deltas).capitalize()}.")
-        if restacks:
-            lines.append(f"  - Restack needed: {'; '.join(restacks)}.")
-        if obsolete:
-            lines.append(f"  - Started but no longer planned: {_codes(obsolete)}. Close or revert those MRs on purpose.")
-        log = lines + contract_log + log
+                log.append(f"  - {'; '.join(deltas).capitalize()}.")
+        log += contract_log
     elif contract_log:
-        log = [f"- **r{revision}** ({today(date)}): Progress changed the plan."] + contract_log + log
-    if _changelog:
-        log = _changelog + log
+        log = [f"- **r{revision}** ({today(date)}): Work in progress changed the plan."] + contract_log
+    if restacks:
+        log.append(f"  - Restack needed: {'; '.join(restacks)}. Run `cad.py restack`.")
+    if orphaned:
+        log.append(f"  - Branches exist for nodes no longer planned: {_codes(orphaned)}. Close or revert them on purpose.")
+    if log and not log[0].startswith("- "):
+        log.insert(0, f"- **r{revision}** ({today(date)}): Branch layout changed.")
 
     new_front = {
         "cad": 1,
         "feature": spec.feature,
         "revision": revision,
-        "status": status,
         "spec_hash": h,
-        "approved": approval,
         "counts": {
             "theoretical": result.space.theoretical,
             "valid": len(result.space.valid),
             "scenarios": len(result.scenarios.variants),
             "nodes": len(result.plan.nodes),
         },
-        "nodes": state,
-        "followups": followups,
+        "nodes": nodes,
     }
-    if new_front["approved"] is None:
-        del new_front["approved"]
-    if not followups:
-        del new_front["followups"]
+    if followups:
+        new_front["followups"] = followups
 
-    rel = os.path.relpath(path)
-    content = render_mod.generated_markdown(result, state, doc_path=rel, doc_status=status)
+    content = render_mod.generated_markdown(result, doc_path=os.path.relpath(path))
     body = _replace_generated(doc.body, content)
     if log:
         body = _add_changelog(body, log)
     body = _write_contracts(body, snapshots)
     _write(path, new_front, body)
     return result, changed
-
-
-def approve(path, by, date=None):
-    doc = read(path)
-    raw, spec = _load(doc)
-    h = spec_mod.spec_hash(raw)
-    if doc.front.get("spec_hash") != h:
-        raise DocError("The spec changed since the last render. Run `cad.py render` and review the plan first.")
-    if not by or not str(by).strip():
-        raise DocError("Approval needs a name: --by <reviewer>.")
-    result = engine.run(spec, known_nodes=None)
-    if result.status == "error":
-        raise DocError("The plan has errors and cannot be approved.")
-    front = dict(doc.front)
-    front["status"] = "approved"
-    front["approved"] = {"by": str(by).strip(), "on": today(date), "hash": h}
-    _write(path, front, doc.body)
-    entry = [f"- **r{front.get('revision', 1)}** ({today(date)}): Approved by {str(by).strip()}."]
-    if result.confirmations:
-        entry.append("  - Confirmed despite: " + " ".join(result.confirmations))
-    return render(path, date=date, _force_status="approved", _changelog=entry)[0]
-
-
-def check(path):
-    """Return (ok, message): is the document approved for its current spec?"""
-    doc = read(path)
-    raw, _ = _load(doc)
-    h = spec_mod.spec_hash(raw)
-    front = doc.front
-    if front.get("spec_hash") != h:
-        return False, "The spec changed since the last render. Run `cad.py render`, review, and approve again."
-    approval = front.get("approved") or {}
-    if front.get("status") not in ("approved", "implementing", "done") or not approval:
-        return False, "The plan is not approved yet. Ask the engineer to review it, then run `cad.py approve --by <name>`."
-    if approval.get("hash") != h:
-        return False, "The approval belongs to an older spec. Review and approve again."
-    return True, f"Approved by {approval.get('by')} on {approval.get('on')} for spec {h}."
-
-
-def mark(path, node_id, status, mr=None, restacked=False, updated=False, date=None):
-    if status not in STATUSES:
-        raise DocError(f"status must be one of {', '.join(STATUSES)}")
-    ok, message = check(path)
-    if not ok:
-        raise DocError(message)
-    doc = read(path)
-    front = dict(doc.front)
-    nodes = front.get("nodes") or {}
-    if node_id not in nodes:
-        raise DocError(f"unknown node {node_id!r}; nodes are: {', '.join(nodes)}")
-    entry = dict(nodes[node_id])
-    entry["status"] = status
-    if mr:
-        entry["mr"] = str(mr)
-    if restacked or status == "merged":
-        entry.pop("restack_from", None)
-    body = doc.body
-    if updated:
-        entry.pop("needs_update", None)
-        contracts = dict(doc.contracts or {})
-        contracts.pop(node_id, None)
-        body = _write_contracts(body, contracts)
-    nodes[node_id] = entry
-    front["nodes"] = nodes
-    active = [v for v in nodes.values() if not v.get("obsolete")]
-    doc_status = "done" if active and all(v["status"] == "merged" for v in active) else "implementing"
-    front["status"] = doc_status
-    _write(path, front, body)
-    return render(path, date=date, _force_status=doc_status)[0]

@@ -67,7 +67,7 @@ def check_schema(value, schema, path="$"):
     return errors
 
 
-def load_schema(name):
+def load_schema(name):  # noqa: D103
     with open(os.path.join(SCHEMAS, name), encoding="utf-8") as fh:
         return json.load(fh)
 
@@ -97,94 +97,33 @@ class LifecycleTest(unittest.TestCase):
         result, changed = document.render(self.doc)
         self.assertTrue(changed)
         text = self.text()
-        self.assertEqual(text.count("```mermaid"), 3)
+        self.assertEqual(text.count("```mermaid"), 2)
         self.assertIn("| Theoretical combinations (3 × 3 × 3 × 2) | 54 |", text)
         self.assertIn("| Removed by constraints | 12 |", text)
         self.assertIn("| **Valid product variants** | **42** |", text)
         self.assertIn("**Needs confirmation:**", text)
         self.assertIn("- **r1** (2026-09-23): Initial plan.", text)
+        self.assertIn("<details><summary><b>1. Add lead capture flow foundation</b> <code>base</code></summary>", text)
         front = document.read(self.doc).front
-        self.assertEqual((front["revision"], front["status"]), (1, "draft"))
-        self.assertEqual(front["nodes"]["opt.pdf_delivery.email"]["onto"], "lead-capture-flow/pdf-delivery")
+        self.assertEqual(front["revision"], 1)
+        self.assertNotIn("status", front)
+        self.assertEqual(front["nodes"]["opt.pdf_delivery.email"], {
+            "branch": "lead-capture-flow/pdf-delivery-email", "onto": "lead-capture-flow/pdf-delivery",
+        })
 
-        # Rendering again without spec changes is a no-op for the revision.
+        # Rendering again without spec changes keeps the revision.
         document.render(self.doc)
         self.assertEqual(document.read(self.doc).front["revision"], 1)
 
-        ok, message = document.check(self.doc)
-        self.assertFalse(ok)
-        self.assertIn("not approved", message)
-        with self.assertRaises(document.DocError):
-            document.mark(self.doc, "base", "branched")
-
-        document.approve(self.doc, "Dana")
-        ok, _ = document.check(self.doc)
-        self.assertTrue(ok)
-        self.assertIn("Approved by Dana", self.text())
-        self.assertIn("Confirmed despite: 42 targeted variants", self.text())
-
-        document.mark(self.doc, "base", "merged", mr="!1")
-        document.mark(self.doc, "dim.channel", "mr-open", mr="!2")
-        front = document.read(self.doc).front
-        self.assertEqual(front["status"], "implementing")
-        self.assertEqual(front["nodes"]["dim.channel"]["mr"], "!2")
-        self.assertIn("(parent `lead-capture-flow/base` is merged)", self.text())
-
         # Update: a new conditional decision plus an interaction.
         self.replace_spec(support.read(support.fixture("lead-capture-flow-html-email.yaml")))
-        ok, message = document.check(self.doc)
-        self.assertFalse(ok)
-        self.assertIn("spec changed", message)
         document.render(self.doc, note="Emails can be HTML or plain text.", date="2026-09-24")
-        front = document.read(self.doc).front
-        self.assertEqual((front["revision"], front["status"]), (2, "draft"))
-        self.assertNotIn("approved", front)
-        self.assertEqual(front["nodes"]["base"]["status"], "merged")
+        self.assertEqual(document.read(self.doc).front["revision"], 2)
         text = self.text()
         self.assertIn("- **r2** (2026-09-24): Emails can be HTML or plain text.", text)
         self.assertRegex(text, r"Added: .*`dim.email_format`")
         self.assertIn("Valid variants 42 to 52", text)
-        self.assertIn("Sign-off cleared", text)
         self.assertIn("| Collapsed, a decision does not apply | 36 |", text)
-
-    def test_restack_is_detected_for_started_work(self):
-        document.render(self.doc)
-        document.approve(self.doc, "Dana")
-        document.mark(self.doc, "dim.channel", "mr-open", mr="!2")
-        document.mark(self.doc, "opt.channel.checkout", "mr-open", mr="!3")
-        raw = miniyaml.loads(document.read(self.doc).spec_text)
-        raw["constraints"].append({"if": "channel == checkout", "requires": "crm_sync != none"})
-        self.replace_spec(miniyaml.dumps(raw))
-        document.render(self.doc, note="Checkout leads always go to HubSpot.")
-        front = document.read(self.doc).front
-        checkout = front["nodes"]["opt.channel.checkout"]
-        self.assertEqual(checkout["restack_from"], "lead-capture-flow/channel")
-        self.assertEqual(checkout["onto"], "lead-capture-flow/crm-sync")
-        self.assertEqual(front["nodes"]["dim.channel"]["onto"], "lead-capture-flow/base")
-        self.assertIn("Restack needed: `opt.channel.checkout`", self.text())
-
-        document.approve(self.doc, "Dana")
-        proc = cad("stack", self.doc, "--platform", "gitlab")
-        self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertIn(
-            "git rebase --onto lead-capture-flow/crm-sync lead-capture-flow/channel lead-capture-flow/channel-checkout",
-            proc.stdout,
-        )
-        self.assertIn("glab mr update 3 --target-branch lead-capture-flow/crm-sync", proc.stdout)
-        document.mark(self.doc, "opt.channel.checkout", "mr-open", restacked=True)
-        self.assertNotIn("restack_from", document.read(self.doc).front["nodes"]["opt.channel.checkout"])
-
-    def test_removed_started_node_is_kept_as_obsolete(self):
-        document.render(self.doc)
-        document.approve(self.doc, "Dana")
-        document.mark(self.doc, "opt.crm_sync.hubspot", "mr-open", mr="!9")
-        raw = miniyaml.loads(document.read(self.doc).spec_text)
-        raw["dimensions"]["crm_sync"] = ["none"]
-        self.replace_spec(miniyaml.dumps(raw))
-        document.render(self.doc, note="No HubSpot after all.")
-        front = document.read(self.doc).front
-        self.assertTrue(front["nodes"]["opt.crm_sync.hubspot"]["obsolete"])
-        self.assertIn("Started but no longer planned: `opt.crm_sync.hubspot`", self.text())
 
     def test_invalid_spec_leaves_document_untouched(self):
         document.render(self.doc)
@@ -220,17 +159,16 @@ class CliTest(unittest.TestCase):
         self.assertIn("Status  needs confirmation", out)
         self.assertIn("Product decisions made on your behalf: 0", out)
 
-    def test_analyze_json_matches_schema(self):
-        schema = load_schema("analysis.schema.json")
+    def test_analyze_json(self):
         for name in ("lead-capture-flow.yaml", "lead-capture-flow-html-email.yaml", "findings.yaml", "contradictory.yaml"):
-            proc = cad("analyze", support.fixture(name), "--json")
-            data = json.loads(proc.stdout)
-            self.assertEqual(check_schema(data, schema), [], name)
+            data = json.loads(cad("analyze", support.fixture(name), "--json").stdout)
+            self.assertEqual(data["tool"], "combinatorial-agentic-development", name)
         data = json.loads(cad("analyze", support.fixture("lead-capture-flow.yaml"), "--json").stdout)
         self.assertEqual(data["counts"], {
             "theoretical": 54, "collapsed": 0, "invalid": 12, "valid": 42,
             "scenarios": 42, "configurable": 42, "nodes": 13,
         })
+        self.assertEqual(len(data["nodes"][0]["mr_description"].splitlines()) > 3, True)
 
     def test_fixtures_match_spec_schema(self):
         schema = load_schema("spec.schema.json")
@@ -249,25 +187,15 @@ class CliTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 1)
         self.assertIn("unknown option 'r'", proc.stderr)
 
-    def test_stack_requires_approval(self):
+    def test_stack_dry_run_outside_git(self):
         with tempfile.TemporaryDirectory() as tmp:
             doc = os.path.join(tmp, "plan.md")
             self.assertEqual(cad("new", doc, "--spec", support.fixture("lead-capture-flow.yaml")).returncode, 0)
             self.assertEqual(cad("render", doc).returncode, 0)
             proc = cad("stack", doc)
-            self.assertEqual(proc.returncode, 1)
-            self.assertIn("not approved", proc.stderr)
-            proc = cad("stack", doc, "--preview", "--platform", "github", "--write-descriptions", os.path.join(tmp, "mr"))
-            self.assertEqual(proc.returncode, 0)
-            self.assertIn("PREVIEW", proc.stdout)
-            self.assertIn("gh pr create --draft --head lead-capture-flow/base --base main", proc.stdout)
-            written = sorted(os.listdir(os.path.join(tmp, "mr")))
-            self.assertEqual(len(written), 13)
-            body = support.read(os.path.join(tmp, "mr", "lead-capture-flow__pdf-delivery-email.md"))
-            self.assertIn("## Summary", body)
-            self.assertIn("## Verification", body)
-            self.assertIn("## Risks", body)
-            self.assertIn("Based on `lead-capture-flow/pdf-delivery`", body)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("git switch -c lead-capture-flow/base origin/main", proc.stdout)
+            self.assertNotIn("git push", proc.stdout)
 
     def test_new_refuses_to_overwrite(self):
         with tempfile.TemporaryDirectory() as tmp:

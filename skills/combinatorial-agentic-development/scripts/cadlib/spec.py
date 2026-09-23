@@ -20,12 +20,9 @@ SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 NOOP_IDS = {"none", "disabled", "off"}
 MODES = ("exhaustive", "pairwise", "twise", "selected")
 LAYOUTS = ("tree", "linear")
-PLATFORMS = ("auto", "gitlab", "github", "none")
 DEFAULT_LIMITS = {
-    "max_valid_variants": 32,
-    "max_implementation_nodes": 20,
-    "require_confirmation_above": 12,
-    "max_enumeration": 100000,
+    "max_variants": 32,  # targeted variants above this need a confirmation
+    "max_enumeration": 100000,  # theoretical combinations above this are refused
 }
 PLAN_FIELDS = (
     "title", "purpose", "scope", "components", "files", "guidance",
@@ -154,10 +151,6 @@ class Spec:
     verify: dict = field(default_factory=dict)
     raw: dict = field(repr=False, default_factory=dict)
     warnings: list = field(default_factory=list)
-
-    @property
-    def option_map(self):
-        return {d.id: d.option_ids for d in self.dimensions.values()}
 
 
 def spec_hash(raw):
@@ -415,7 +408,6 @@ def load(raw):
         "base_branch": str(raw_stack.get("base_branch", "main")),
         "branch_prefix": str(raw_stack.get("branch_prefix", feature)).strip("/"),
         "layout": str(raw_stack.get("layout", "tree")),
-        "platform": str(raw_stack.get("platform", "auto")),
         "max_coupling": raw_stack.get("max_coupling", 2),
     }
     if not isinstance(stack["max_coupling"], int) or isinstance(stack["max_coupling"], bool) or stack["max_coupling"] < 0:
@@ -426,8 +418,6 @@ def load(raw):
             warnings.append(f"stack.{key} is unknown{_suggest(key, stack)} and ignored")
     if stack["layout"] not in LAYOUTS:
         errors.append(f"stack.layout must be one of {', '.join(LAYOUTS)}")
-    if stack["platform"] not in PLATFORMS:
-        errors.append(f"stack.platform must be one of {', '.join(PLATFORMS)}")
 
     plan = raw.get("plan") or {}
     if not isinstance(plan, dict):

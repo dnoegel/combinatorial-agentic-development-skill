@@ -60,7 +60,6 @@ class GitRepoCase(unittest.TestCase):
         os.environ["CAD_DATE"] = "2026-09-23"
         document.create(self.doc, "shop", spec_text=SPEC)
         document.render(self.doc)
-        document.approve(self.doc, "Dana")
         self.write("probe.py", PROBE)
         self.write("check.py", "print('ok')\n")
         git(self.repo, "add", "-A")
@@ -205,14 +204,6 @@ class BriefAndStackTest(GitRepoCase):
         self.assertIn("[1/5] merged base", proc.stdout)
         self.assertIn("git switch -c shop/theme main", proc.stdout)
 
-    def test_mark_refuses_on_feature_branch(self):
-        self.node_branch("shop/base", "main")
-        proc = cad("mark", self.doc, "base", "--status", "branched", cwd=self.repo)
-        self.assertEqual(proc.returncode, 1)
-        self.assertIn("Progress is recorded on `main` only", proc.stderr)
-        git(self.repo, "switch", "-q", "main")
-        proc = cad("mark", self.doc, "base", "--status", "branched", cwd=self.repo)
-        self.assertEqual(proc.returncode, 0, proc.stderr)
 
 
 class PlanFindingsTest(unittest.TestCase):

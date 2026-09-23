@@ -182,29 +182,21 @@ class StackTest(unittest.TestCase):
 class StepsTest(unittest.TestCase):
     def test_dry_run_steps(self):
         result = run_fixture("lead-capture-flow.yaml")
-        out = steps(result.plan, result.stack, {}, "gitlab")
-        first = out[0]
-        self.assertEqual(first["action"], "create")
-        self.assertEqual(first["commands"][0], "git switch -c lead-capture-flow/base origin/main")
-        self.assertIn("glab mr create --draft", first["commands"][-1])
-        self.assertIn("--target-branch main", first["commands"][-1])
+        out = steps(result.plan, result.stack, {})
+        self.assertEqual(out[0]["commands"][0], "git switch -c lead-capture-flow/base origin/main")
+        self.assertEqual(out[0]["commands"][1], "git update-ref refs/cad/base/lead-capture-flow/base origin/main")
         child = next(s for s in out if s["node"] == "dim.pdf_delivery")
-        self.assertIn("--target-branch lead-capture-flow/email-capture", child["commands"][-1])
+        self.assertEqual(child["commands"][0], "git switch -c lead-capture-flow/pdf-delivery lead-capture-flow/email-capture")
+        for s in out:
+            self.assertFalse(any(c.startswith(("glab", "gh ", "git push")) for c in s["commands"]))
 
-    def test_merged_parent_retargets_to_base(self):
+    def test_children_of_merged_parents_start_from_the_base_branch(self):
         result = run_fixture("lead-capture-flow.yaml")
-        state = {"base": {"status": "merged"}, "dim.channel": {"status": "mr-open", "mr": "!3"}}
-        out = {s["node"]: s for s in steps(result.plan, result.stack, state, "github")}
-        self.assertEqual(out["base"]["action"], "done")
-        restack = out["dim.channel"]
-        self.assertEqual(restack["action"], "restack")
-        self.assertIn("git rebase --onto origin/main lead-capture-flow/base lead-capture-flow/channel", restack["commands"])
-        self.assertIn("gh pr edit 3 --base main", restack["commands"])
-
-    def test_no_platform_means_no_mr_commands(self):
-        result = run_fixture("lead-capture-flow.yaml")
-        for s in steps(result.plan, result.stack, {}, "none"):
-            self.assertFalse(any(c.startswith(("glab", "gh ")) for c in s["commands"]))
+        state = {"base": {"status": "merged"}, "dim.channel": {"status": "branched"}}
+        out = {s["node"]: s for s in steps(result.plan, result.stack, state, remote=False)}
+        self.assertEqual(out["base"]["commands"], [])
+        self.assertEqual(out["dim.channel"]["commands"], [])
+        self.assertEqual(out["dim.crm_sync"]["commands"][0], "git switch -c lead-capture-flow/crm-sync main")
 
 
 if __name__ == "__main__":

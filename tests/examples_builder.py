@@ -9,6 +9,7 @@ import io
 import os
 import re
 import shutil
+import subprocess
 import sys
 
 import support
@@ -40,18 +41,27 @@ def _set_date(value):
     os.environ["CAD_DATE"] = value
 
 
+def _git(*args):
+    subprocess.run(["git", *args], check=True, capture_output=True, text=True)
+
+
+def _branch(name, parent, message):
+    _git("switch", "-q", "-c", name, parent)
+    _git("commit", "-q", "--allow-empty", "-m", message)
+    _git("switch", "-q", "main")
+
+
 def build(workdir):
-    """Generate the examples inside `workdir`, return {relative path: content}."""
+    """Generate the examples inside `workdir`, return {relative path: content}.
+
+    Revision 2 is rendered inside a throwaway git repository with some work
+    already merged or in progress, because progress is read from git.
+    """
     old_cwd, old_date = os.getcwd(), os.environ.get("CAD_DATE")
     os.makedirs(os.path.join(workdir, "examples"), exist_ok=True)
     os.chdir(workdir)
     try:
         r1 = "examples/lead-capture-flow.md"
-        r2 = "examples/lead-capture-flow-r2.md"
-        for path in (r1, r2):
-            if os.path.exists(path):
-                os.remove(path)
-
         _set_date("2026-09-23")
         _cli("new", r1, "--spec", support.fixture("lead-capture-flow.yaml"), "--intent", INTENT)
         with open(r1, encoding="utf-8") as fh:
@@ -60,26 +70,37 @@ def build(workdir):
         with open(r1, "w", encoding="utf-8") as fh:
             fh.write(text)
         _cli("render", r1, "--note", "Initial plan for the lead capture flow.")
-        dry_run = _cli("stack", r1, "--preview", "--platform", "gitlab")
+        dry_run = _cli("stack", r1)
 
-        shutil.copy(r1, r2)
-        _set_date("2026-09-24")
-        _cli("approve", r2, "--by", "Dana (product)")
+        repo = os.path.join(workdir, "repo")
+        os.makedirs(os.path.join(repo, "examples"))
+        shutil.copy(r1, os.path.join(repo, "examples", "lead-capture-flow-r2.md"))
+        os.chdir(repo)
+        doc = "examples/lead-capture-flow-r2.md"
+        _git("init", "-q", "-b", "main")
+        _git("config", "user.email", "example@example.com")
+        _git("config", "user.name", "Example")
+        _git("add", "-A")
+        _git("commit", "-q", "-m", "Add lead capture plan")
+        _branch("lead-capture-flow/base", "main", "Add lead capture flow foundation")
+        _git("merge", "-q", "--no-ff", "-m", "Merge foundation", "lead-capture-flow/base")
+        _branch("lead-capture-flow/email-capture", "main", "Add email capture abstraction")
+        _git("merge", "-q", "--no-ff", "-m", "Merge email capture", "lead-capture-flow/email-capture")
+        _branch("lead-capture-flow/email-capture-after-test", "main", "Capture the email after the test")
         _set_date("2026-09-25")
-        _cli("mark", r2, "base", "--status", "merged", "--mr", "!4")
-        _cli("mark", r2, "dim.email_capture", "--status", "merged", "--mr", "!5")
-        _cli("mark", r2, "opt.email_capture.after_test", "--status", "mr-open", "--mr", "!7")
+        _cli("render", doc)  # snapshot what the started nodes promised
         with open(support.fixture("lead-capture-flow-html-email.yaml"), encoding="utf-8") as fh:
             new_spec = fh.read().rstrip("\n")
-        doc = document.read(r2)
-        with open(r2, encoding="utf-8") as fh:
+        with open(doc, encoding="utf-8") as fh:
             text = fh.read()
-        text = text.replace(doc.spec_text.rstrip("\n"), new_spec, 1)
-        with open(r2, "w", encoding="utf-8") as fh:
+        text = text.replace(document.read(doc).spec_text.rstrip("\n"), new_spec, 1)
+        with open(doc, "w", encoding="utf-8") as fh:
             fh.write(text)
         _set_date("2026-09-28")
-        _cli("render", r2, "--note", UPDATE_NOTE)
-        dry_run_r2 = _cli("stack", r2, "--preview", "--platform", "gitlab")
+        _cli("render", doc, "--note", UPDATE_NOTE)
+        dry_run_r2 = _cli("stack", doc)
+        os.chdir(workdir)
+        shutil.copy(os.path.join(repo, doc), "examples/lead-capture-flow-r2.md")
 
         with open("examples/lead-capture-flow.dry-run.txt", "w", encoding="utf-8") as fh:
             fh.write(dry_run)

@@ -2,8 +2,7 @@
 cad: 1
 feature: lead-capture-flow
 revision: 1
-status: draft
-spec_hash: 7d0fecc2ccc6
+spec_hash: 7cc7f96d9cd2
 counts:
   theoretical: 54
   valid: 42
@@ -13,55 +12,42 @@ nodes:
   base:
     branch: lead-capture-flow/base
     onto: main
-    status: planned
   dim.channel:
     branch: lead-capture-flow/channel
     onto: lead-capture-flow/base
-    status: planned
   dim.email_capture:
     branch: lead-capture-flow/email-capture
     onto: lead-capture-flow/base
-    status: planned
   dim.pdf_delivery:
     branch: lead-capture-flow/pdf-delivery
     onto: lead-capture-flow/email-capture
-    status: planned
   dim.crm_sync:
     branch: lead-capture-flow/crm-sync
     onto: lead-capture-flow/base
-    status: planned
   opt.channel.website:
     branch: lead-capture-flow/channel-website
     onto: lead-capture-flow/channel
-    status: planned
   opt.channel.landing_page:
     branch: lead-capture-flow/channel-landing-page
     onto: lead-capture-flow/channel
-    status: planned
   opt.channel.checkout:
     branch: lead-capture-flow/channel-checkout
     onto: lead-capture-flow/channel
-    status: planned
   opt.pdf_delivery.email:
     branch: lead-capture-flow/pdf-delivery-email
     onto: lead-capture-flow/pdf-delivery
-    status: planned
   opt.pdf_delivery.download:
     branch: lead-capture-flow/pdf-delivery-download
     onto: lead-capture-flow/pdf-delivery
-    status: planned
   opt.email_capture.before_test:
     branch: lead-capture-flow/email-capture-before-test
     onto: lead-capture-flow/email-capture
-    status: planned
   opt.email_capture.after_test:
     branch: lead-capture-flow/email-capture-after-test
     onto: lead-capture-flow/email-capture
-    status: planned
   opt.crm_sync.hubspot:
     branch: lead-capture-flow/crm-sync-hubspot
     onto: lead-capture-flow/crm-sync
-    status: planned
 ---
 
 # Lead capture flow
@@ -117,9 +103,7 @@ generation:
   mode: exhaustive
 
 limits:
-  max_valid_variants: 20
-  max_implementation_nodes: 12
-  require_confirmation_above: 8
+  max_variants: 20
 ```
 
 <!-- cad:generated:start (edit the spec above and run `cad.py render`; changes below this line are overwritten) -->
@@ -134,14 +118,10 @@ limits:
 | Test scenarios (exhaustive) | 42 |
 | Implementation nodes (MRs) | 13 |
 
-**Plan status:** Draft. Waiting for sign-off.
-
 **Needs confirmation:**
-- 42 targeted variants exceed max_valid_variants (20).
-- 13 implementation nodes exceed max_implementation_nodes (12).
-- 13 new MRs in this revision exceed require_confirmation_above (8).
+- 42 targeted variants exceed max_variants (20).
 
-Options: proceed as planned, switch the test matrix to pairwise, add a constraint that rules out combinations nobody wants, bundle small dimensions (`bundle: true`) into one MR each, split the feature into smaller decision spaces, raise the limits in the spec on purpose.
+Options: proceed as planned, switch the test matrix to pairwise, add a constraint that rules out combinations nobody wants, raise limits.max_variants on purpose.
 
 ### Decision tree
 
@@ -189,41 +169,6 @@ Every path from left to right is one valid variant. Branches with identical cont
 | C1 | `if pdf_delivery == email requires email_capture != disabled` | 6 | 6 |  |
 | C2 | `if channel == checkout excludes email_capture == before_test` | 6 | 6 |  |
 
-<details><summary>Constraint map</summary>
-
-```mermaid
-flowchart LR
-  subgraph d_channel["Channel"]
-    direction TB
-    o_channel__website["website"]
-    o_channel__landing_page["landing_page"]
-    o_channel__checkout["checkout"]
-  end
-  subgraph d_pdf_delivery["PDF delivery"]
-    direction TB
-    o_pdf_delivery__email["email"]
-    o_pdf_delivery__download["download"]
-    o_pdf_delivery__none["none"]
-  end
-  subgraph d_email_capture["Email capture"]
-    direction TB
-    o_email_capture__before_test["before_test"]
-    o_email_capture__after_test["after_test"]
-    o_email_capture__disabled["disabled"]
-  end
-  subgraph d_crm_sync["CRM sync"]
-    direction TB
-    o_crm_sync__hubspot["hubspot"]
-    o_crm_sync__none["none"]
-  end
-  o_pdf_delivery__email --x|"C1 excludes"| o_email_capture__disabled
-  o_channel__checkout --x|"C2 excludes"| o_email_capture__before_test
-  classDef noop stroke-dasharray:4 3
-  class o_pdf_delivery__none,o_email_capture__disabled,o_crm_sync__none noop
-```
-
-</details>
-
 ### Findings
 
 - **warning**: No `verify.probe` configured: nothing proves that each option actually changes the product. Green tests per branch are not enough (see references/verification.md).
@@ -265,33 +210,32 @@ flowchart TD
   s_dim_crm_sync --> s_opt_crm_sync_hubspot
 ```
 
-| # | Node | Branch | Onto | Status |
-|---:|---|---|---|---|
-| 1 | `base` | `lead-capture-flow/base` | `main` | planned |
-| 2 | `dim.channel` | `lead-capture-flow/channel` | `lead-capture-flow/base` | planned |
-| 3 | `dim.email_capture` | `lead-capture-flow/email-capture` | `lead-capture-flow/base` | planned |
-| 4 | `dim.pdf_delivery` | `lead-capture-flow/pdf-delivery` | `lead-capture-flow/email-capture` | planned |
-| 5 | `dim.crm_sync` | `lead-capture-flow/crm-sync` | `lead-capture-flow/base` | planned |
-| 6 | `opt.channel.website` | `lead-capture-flow/channel-website` | `lead-capture-flow/channel` | planned |
-| 7 | `opt.channel.landing_page` | `lead-capture-flow/channel-landing-page` | `lead-capture-flow/channel` | planned |
-| 8 | `opt.channel.checkout` | `lead-capture-flow/channel-checkout` | `lead-capture-flow/channel` | planned |
-| 9 | `opt.pdf_delivery.email` | `lead-capture-flow/pdf-delivery-email` | `lead-capture-flow/pdf-delivery` | planned |
-| 10 | `opt.pdf_delivery.download` | `lead-capture-flow/pdf-delivery-download` | `lead-capture-flow/pdf-delivery` | planned |
-| 11 | `opt.email_capture.before_test` | `lead-capture-flow/email-capture-before-test` | `lead-capture-flow/email-capture` | planned |
-| 12 | `opt.email_capture.after_test` | `lead-capture-flow/email-capture-after-test` | `lead-capture-flow/email-capture` | planned |
-| 13 | `opt.crm_sync.hubspot` | `lead-capture-flow/crm-sync-hubspot` | `lead-capture-flow/crm-sync` | planned |
+| # | Node | Branch | Onto |
+|---:|---|---|---|
+| 1 | `base` | `lead-capture-flow/base` | `main` |
+| 2 | `dim.channel` | `lead-capture-flow/channel` | `lead-capture-flow/base` |
+| 3 | `dim.email_capture` | `lead-capture-flow/email-capture` | `lead-capture-flow/base` |
+| 4 | `dim.pdf_delivery` | `lead-capture-flow/pdf-delivery` | `lead-capture-flow/email-capture` |
+| 5 | `dim.crm_sync` | `lead-capture-flow/crm-sync` | `lead-capture-flow/base` |
+| 6 | `opt.channel.website` | `lead-capture-flow/channel-website` | `lead-capture-flow/channel` |
+| 7 | `opt.channel.landing_page` | `lead-capture-flow/channel-landing-page` | `lead-capture-flow/channel` |
+| 8 | `opt.channel.checkout` | `lead-capture-flow/channel-checkout` | `lead-capture-flow/channel` |
+| 9 | `opt.pdf_delivery.email` | `lead-capture-flow/pdf-delivery-email` | `lead-capture-flow/pdf-delivery` |
+| 10 | `opt.pdf_delivery.download` | `lead-capture-flow/pdf-delivery-download` | `lead-capture-flow/pdf-delivery` |
+| 11 | `opt.email_capture.before_test` | `lead-capture-flow/email-capture-before-test` | `lead-capture-flow/email-capture` |
+| 12 | `opt.email_capture.after_test` | `lead-capture-flow/email-capture-after-test` | `lead-capture-flow/email-capture` |
+| 13 | `opt.crm_sync.hubspot` | `lead-capture-flow/crm-sync-hubspot` | `lead-capture-flow/crm-sync` |
 
-Layout: tree. Merge order is the table order. After a parent merges, retarget its children to `main` (see `cad.py stack`).
+Layout: tree. Merge order is the table order. Progress lives in git; `cad.py stack` shows what exists and what comes next.
 
 ### Nodes
 
-### 1. Add lead capture flow foundation
+<details><summary><b>1. Add lead capture flow foundation</b> <code>base</code></summary>
 
 Shared domain model, configuration entry point and wiring that every variant builds on.
 
 | | |
 |---|---|
-| Node | `base` (base) |
 | Decisions | `shared by all variants` |
 | Scope | Domain types, one configuration object with a key per dimension, validation of that configuration against the constraints, and the composition root that picks implementations. |
 | Depends on | nothing (starts the stack) |
@@ -299,7 +243,6 @@ Shared domain model, configuration entry point and wiring that every variant bui
 | Expected files | _to fill in from the repository_ |
 | Risk / complexity | medium / M |
 | Branch | `lead-capture-flow/base` onto `main` |
-| Status | planned |
 
 **Guidance.** Prefer one configuration object over scattered flags. Validate it at startup with the same rules as the constraint table, so an invalid combination fails fast and loudly. Own the composition root here and let it discover option modules at runtime, so parallel option branches never touch the same file. Add the probe now: it proves later that every option is wired in.
 
@@ -314,7 +257,7 @@ Shared domain model, configuration entry point and wiring that every variant bui
 - [ ] The composition root discovers option modules at runtime, so option branches never edit shared files.
 - [ ] Every active option leaves a marker in the output (for example `data-cad="style=serious"`), and the `verify.probe` command prints the markers it observes as `dimension=option`.
 
-<details><summary>MR description</summary>
+**MR description**
 
 ```markdown
 ## Summary
@@ -335,13 +278,12 @@ Shared domain model, configuration entry point and wiring that every variant bui
 
 </details>
 
-### 2. Add channel abstraction
+<details><summary><b>2. Add channel abstraction</b> <code>dim.channel</code></summary>
 
 Variation point for channel: one interface and one configuration key `channel`, so every option plugs in without touching callers.
 
 | | |
 |---|---|
-| Node | `dim.channel` (dimension) |
 | Decisions | `channel in [website, landing_page, checkout]` |
 | Scope | Interface for channel, registration by option id. |
 | Depends on | `base` |
@@ -349,7 +291,6 @@ Variation point for channel: one interface and one configuration key `channel`, 
 | Expected files | _to fill in from the repository_ |
 | Risk / complexity | medium / M |
 | Branch | `lead-capture-flow/channel` onto `lead-capture-flow/base` |
-| Status | planned |
 
 **Guidance.** Use a strategy (or equivalent) keyed by option id. Keep today's behavior as the default. A no-op option is a real implementation of the interface; keep if-statements out of the call sites.
 
@@ -361,7 +302,7 @@ Variation point for channel: one interface and one configuration key `channel`, 
 - [ ] Selecting any of website, landing_page, checkout through configuration works without code changes in callers.
 - [ ] The selected `channel` option is observable in the output, no-op options included (for example `channel=checkout`).
 
-<details><summary>MR description</summary>
+**MR description**
 
 ```markdown
 ## Summary
@@ -383,13 +324,12 @@ Variation point for channel: one interface and one configuration key `channel`, 
 
 </details>
 
-### 3. Add email capture abstraction
+<details><summary><b>3. Add email capture abstraction</b> <code>dim.email_capture</code></summary>
 
 Variation point for email capture: one interface and one configuration key `email_capture`, so every option plugs in without touching callers.
 
 | | |
 |---|---|
-| Node | `dim.email_capture` (dimension) |
 | Decisions | `email_capture in [before_test, after_test, disabled]` |
 | Scope | Interface for email capture, registration by option id, and the no-op implementation for `disabled`. |
 | Depends on | `base` |
@@ -397,7 +337,6 @@ Variation point for email capture: one interface and one configuration key `emai
 | Expected files | _to fill in from the repository_ |
 | Risk / complexity | medium / M |
 | Branch | `lead-capture-flow/email-capture` onto `lead-capture-flow/base` |
-| Status | planned |
 
 **Guidance.** Use a strategy (or equivalent) keyed by option id. Keep today's behavior as the default. A no-op option is a real implementation of the interface; keep if-statements out of the call sites.
 
@@ -410,7 +349,7 @@ Variation point for email capture: one interface and one configuration key `emai
 - [ ] Selecting any of before_test, after_test, disabled through configuration works without code changes in callers.
 - [ ] The selected `email_capture` option is observable in the output, no-op options included (for example `email_capture=disabled`).
 
-<details><summary>MR description</summary>
+**MR description**
 
 ```markdown
 ## Summary
@@ -432,13 +371,12 @@ Variation point for email capture: one interface and one configuration key `emai
 
 </details>
 
-### 4. Add PDF delivery abstraction
+<details><summary><b>4. Add PDF delivery abstraction</b> <code>dim.pdf_delivery</code></summary>
 
 Variation point for PDF delivery: one interface and one configuration key `pdf_delivery`, so every option plugs in without touching callers.
 
 | | |
 |---|---|
-| Node | `dim.pdf_delivery` (dimension) |
 | Decisions | `pdf_delivery in [email, download, none]` |
 | Scope | Interface for PDF delivery, registration by option id, and the no-op implementation for `none`. |
 | Depends on | `base` |
@@ -447,7 +385,6 @@ Variation point for PDF delivery: one interface and one configuration key `pdf_d
 | Expected files | _to fill in from the repository_ |
 | Risk / complexity | medium / M |
 | Branch | `lead-capture-flow/pdf-delivery` onto `lead-capture-flow/email-capture` |
-| Status | planned |
 
 **Guidance.** Use a strategy (or equivalent) keyed by option id. Keep today's behavior as the default. A no-op option is a real implementation of the interface; keep if-statements out of the call sites.
 
@@ -460,7 +397,7 @@ Variation point for PDF delivery: one interface and one configuration key `pdf_d
 - [ ] Selecting any of email, download, none through configuration works without code changes in callers.
 - [ ] The selected `pdf_delivery` option is observable in the output, no-op options included (for example `pdf_delivery=none`).
 
-<details><summary>MR description</summary>
+**MR description**
 
 ```markdown
 ## Summary
@@ -482,13 +419,12 @@ Variation point for PDF delivery: one interface and one configuration key `pdf_d
 
 </details>
 
-### 5. Add CRM sync abstraction
+<details><summary><b>5. Add CRM sync abstraction</b> <code>dim.crm_sync</code></summary>
 
 Variation point for CRM sync: one interface and one configuration key `crm_sync`, so every option plugs in without touching callers.
 
 | | |
 |---|---|
-| Node | `dim.crm_sync` (dimension) |
 | Decisions | `crm_sync in [hubspot, none]` |
 | Scope | Interface for CRM sync, registration by option id, and the no-op implementation for `none`. |
 | Depends on | `base` |
@@ -496,7 +432,6 @@ Variation point for CRM sync: one interface and one configuration key `crm_sync`
 | Expected files | _to fill in from the repository_ |
 | Risk / complexity | low / S |
 | Branch | `lead-capture-flow/crm-sync` onto `lead-capture-flow/base` |
-| Status | planned |
 
 **Guidance.** Use a strategy (or equivalent) keyed by option id. Keep today's behavior as the default. A no-op option is a real implementation of the interface; keep if-statements out of the call sites.
 
@@ -509,7 +444,7 @@ Variation point for CRM sync: one interface and one configuration key `crm_sync`
 - [ ] Selecting any of hubspot, none through configuration works without code changes in callers.
 - [ ] The selected `crm_sync` option is observable in the output, no-op options included (for example `crm_sync=none`).
 
-<details><summary>MR description</summary>
+**MR description**
 
 ```markdown
 ## Summary
@@ -531,13 +466,12 @@ Variation point for CRM sync: one interface and one configuration key `crm_sync`
 
 </details>
 
-### 6. Channel: website
+<details><summary><b>6. Channel: website</b> <code>opt.channel.website</code></summary>
 
 Implement `channel = website` behind the channel abstraction.
 
 | | |
 |---|---|
-| Node | `opt.channel.website` (option) |
 | Decisions | `channel = website` |
 | Scope | One implementation of the channel interface, registered as `website`. No changes to other options. |
 | Depends on | `dim.channel` |
@@ -545,7 +479,6 @@ Implement `channel = website` behind the channel abstraction.
 | Expected files | _to fill in from the repository_ |
 | Risk / complexity | low / S |
 | Branch | `lead-capture-flow/channel-website` onto `lead-capture-flow/channel` |
-| Status | planned |
 
 **Guidance.** Touch only the new implementation and its registration. If the interface has to change, that change belongs in the abstraction node.
 
@@ -558,7 +491,7 @@ Implement `channel = website` behind the channel abstraction.
 - [ ] All 16 test scenarios with channel = website pass.
 - [ ] The probe observes `channel=website` in exactly the scenarios that select it (`cad.py verify --probe`).
 
-<details><summary>MR description</summary>
+**MR description**
 
 ```markdown
 ## Summary
@@ -579,13 +512,12 @@ Implement `channel = website` behind the channel abstraction.
 
 </details>
 
-### 7. Channel: landing page
+<details><summary><b>7. Channel: landing page</b> <code>opt.channel.landing_page</code></summary>
 
 Implement `channel = landing_page` behind the channel abstraction.
 
 | | |
 |---|---|
-| Node | `opt.channel.landing_page` (option) |
 | Decisions | `channel = landing_page` |
 | Scope | One implementation of the channel interface, registered as `landing_page`. No changes to other options. |
 | Depends on | `dim.channel` |
@@ -593,7 +525,6 @@ Implement `channel = landing_page` behind the channel abstraction.
 | Expected files | _to fill in from the repository_ |
 | Risk / complexity | low / S |
 | Branch | `lead-capture-flow/channel-landing-page` onto `lead-capture-flow/channel` |
-| Status | planned |
 
 **Guidance.** Touch only the new implementation and its registration. If the interface has to change, that change belongs in the abstraction node.
 
@@ -606,7 +537,7 @@ Implement `channel = landing_page` behind the channel abstraction.
 - [ ] All 16 test scenarios with channel = landing_page pass.
 - [ ] The probe observes `channel=landing_page` in exactly the scenarios that select it (`cad.py verify --probe`).
 
-<details><summary>MR description</summary>
+**MR description**
 
 ```markdown
 ## Summary
@@ -627,13 +558,12 @@ Implement `channel = landing_page` behind the channel abstraction.
 
 </details>
 
-### 8. Channel: checkout
+<details><summary><b>8. Channel: checkout</b> <code>opt.channel.checkout</code></summary>
 
 Implement `channel = checkout` behind the channel abstraction.
 
 | | |
 |---|---|
-| Node | `opt.channel.checkout` (option) |
 | Decisions | `channel = checkout` |
 | Scope | One implementation of the channel interface, registered as `checkout`. No changes to other options. |
 | Depends on | `dim.channel` |
@@ -641,7 +571,6 @@ Implement `channel = checkout` behind the channel abstraction.
 | Expected files | _to fill in from the repository_ |
 | Risk / complexity | medium / S |
 | Branch | `lead-capture-flow/channel-checkout` onto `lead-capture-flow/channel` |
-| Status | planned |
 
 **Guidance.** Touch only the new implementation and its registration. If the interface has to change, that change belongs in the abstraction node.
 
@@ -654,7 +583,7 @@ Implement `channel = checkout` behind the channel abstraction.
 - [ ] All 10 test scenarios with channel = checkout pass.
 - [ ] The probe observes `channel=checkout` in exactly the scenarios that select it (`cad.py verify --probe`).
 
-<details><summary>MR description</summary>
+**MR description**
 
 ```markdown
 ## Summary
@@ -675,13 +604,12 @@ Implement `channel = checkout` behind the channel abstraction.
 
 </details>
 
-### 9. PDF delivery: email
+<details><summary><b>9. PDF delivery: email</b> <code>opt.pdf_delivery.email</code></summary>
 
 Implement `pdf_delivery = email` behind the PDF delivery abstraction.
 
 | | |
 |---|---|
-| Node | `opt.pdf_delivery.email` (option) |
 | Decisions | `pdf_delivery = email` |
 | Scope | One implementation of the PDF delivery interface, registered as `email`. No changes to other options. |
 | Depends on | `dim.pdf_delivery`, `dim.email_capture` |
@@ -690,7 +618,6 @@ Implement `pdf_delivery = email` behind the PDF delivery abstraction.
 | Expected files | _to fill in from the repository_ |
 | Risk / complexity | medium / S |
 | Branch | `lead-capture-flow/pdf-delivery-email` onto `lead-capture-flow/pdf-delivery` |
-| Status | planned |
 
 **Guidance.** Touch only the new implementation and its registration. If the interface has to change, that change belongs in the abstraction node.
 
@@ -703,7 +630,7 @@ Implement `pdf_delivery = email` behind the PDF delivery abstraction.
 - [ ] All 10 test scenarios with pdf_delivery = email pass.
 - [ ] The probe observes `pdf_delivery=email` in exactly the scenarios that select it (`cad.py verify --probe`).
 
-<details><summary>MR description</summary>
+**MR description**
 
 ```markdown
 ## Summary
@@ -724,13 +651,12 @@ Implement `pdf_delivery = email` behind the PDF delivery abstraction.
 
 </details>
 
-### 10. PDF delivery: download
+<details><summary><b>10. PDF delivery: download</b> <code>opt.pdf_delivery.download</code></summary>
 
 Implement `pdf_delivery = download` behind the PDF delivery abstraction.
 
 | | |
 |---|---|
-| Node | `opt.pdf_delivery.download` (option) |
 | Decisions | `pdf_delivery = download` |
 | Scope | One implementation of the PDF delivery interface, registered as `download`. No changes to other options. |
 | Depends on | `dim.pdf_delivery` |
@@ -738,7 +664,6 @@ Implement `pdf_delivery = download` behind the PDF delivery abstraction.
 | Expected files | _to fill in from the repository_ |
 | Risk / complexity | low / S |
 | Branch | `lead-capture-flow/pdf-delivery-download` onto `lead-capture-flow/pdf-delivery` |
-| Status | planned |
 
 **Guidance.** Touch only the new implementation and its registration. If the interface has to change, that change belongs in the abstraction node.
 
@@ -751,7 +676,7 @@ Implement `pdf_delivery = download` behind the PDF delivery abstraction.
 - [ ] All 16 test scenarios with pdf_delivery = download pass.
 - [ ] The probe observes `pdf_delivery=download` in exactly the scenarios that select it (`cad.py verify --probe`).
 
-<details><summary>MR description</summary>
+**MR description**
 
 ```markdown
 ## Summary
@@ -772,13 +697,12 @@ Implement `pdf_delivery = download` behind the PDF delivery abstraction.
 
 </details>
 
-### 11. Email capture: before test
+<details><summary><b>11. Email capture: before test</b> <code>opt.email_capture.before_test</code></summary>
 
 Implement `email_capture = before_test` behind the email capture abstraction.
 
 | | |
 |---|---|
-| Node | `opt.email_capture.before_test` (option) |
 | Decisions | `email_capture = before_test` |
 | Scope | One implementation of the email capture interface, registered as `before_test`. No changes to other options. |
 | Depends on | `dim.email_capture` |
@@ -786,7 +710,6 @@ Implement `email_capture = before_test` behind the email capture abstraction.
 | Expected files | _to fill in from the repository_ |
 | Risk / complexity | medium / S |
 | Branch | `lead-capture-flow/email-capture-before-test` onto `lead-capture-flow/email-capture` |
-| Status | planned |
 
 **Guidance.** Touch only the new implementation and its registration. If the interface has to change, that change belongs in the abstraction node.
 
@@ -799,7 +722,7 @@ Implement `email_capture = before_test` behind the email capture abstraction.
 - [ ] All 12 test scenarios with email_capture = before_test pass.
 - [ ] The probe observes `email_capture=before_test` in exactly the scenarios that select it (`cad.py verify --probe`).
 
-<details><summary>MR description</summary>
+**MR description**
 
 ```markdown
 ## Summary
@@ -820,13 +743,12 @@ Implement `email_capture = before_test` behind the email capture abstraction.
 
 </details>
 
-### 12. Email capture: after test
+<details><summary><b>12. Email capture: after test</b> <code>opt.email_capture.after_test</code></summary>
 
 Implement `email_capture = after_test` behind the email capture abstraction.
 
 | | |
 |---|---|
-| Node | `opt.email_capture.after_test` (option) |
 | Decisions | `email_capture = after_test` |
 | Scope | One implementation of the email capture interface, registered as `after_test`. No changes to other options. |
 | Depends on | `dim.email_capture` |
@@ -834,7 +756,6 @@ Implement `email_capture = after_test` behind the email capture abstraction.
 | Expected files | _to fill in from the repository_ |
 | Risk / complexity | low / S |
 | Branch | `lead-capture-flow/email-capture-after-test` onto `lead-capture-flow/email-capture` |
-| Status | planned |
 
 **Guidance.** Touch only the new implementation and its registration. If the interface has to change, that change belongs in the abstraction node.
 
@@ -847,7 +768,7 @@ Implement `email_capture = after_test` behind the email capture abstraction.
 - [ ] All 18 test scenarios with email_capture = after_test pass.
 - [ ] The probe observes `email_capture=after_test` in exactly the scenarios that select it (`cad.py verify --probe`).
 
-<details><summary>MR description</summary>
+**MR description**
 
 ```markdown
 ## Summary
@@ -868,13 +789,12 @@ Implement `email_capture = after_test` behind the email capture abstraction.
 
 </details>
 
-### 13. CRM sync: hubspot
+<details><summary><b>13. CRM sync: hubspot</b> <code>opt.crm_sync.hubspot</code></summary>
 
 Implement `crm_sync = hubspot` behind the CRM sync abstraction.
 
 | | |
 |---|---|
-| Node | `opt.crm_sync.hubspot` (option) |
 | Decisions | `crm_sync = hubspot` |
 | Scope | One implementation of the CRM sync interface, registered as `hubspot`. No changes to other options. |
 | Depends on | `dim.crm_sync` |
@@ -882,7 +802,6 @@ Implement `crm_sync = hubspot` behind the CRM sync abstraction.
 | Expected files | _to fill in from the repository_ |
 | Risk / complexity | low / S |
 | Branch | `lead-capture-flow/crm-sync-hubspot` onto `lead-capture-flow/crm-sync` |
-| Status | planned |
 
 **Guidance.** Touch only the new implementation and its registration. If the interface has to change, that change belongs in the abstraction node.
 
@@ -895,7 +814,7 @@ Implement `crm_sync = hubspot` behind the CRM sync abstraction.
 - [ ] All 21 test scenarios with crm_sync = hubspot pass.
 - [ ] The probe observes `crm_sync=hubspot` in exactly the scenarios that select it (`cad.py verify --probe`).
 
-<details><summary>MR description</summary>
+**MR description**
 
 ```markdown
 ## Summary

@@ -2,12 +2,8 @@
 
 import re
 
-from .stack import effective_onto
 
-__all__ = [
-    "receipt", "generated_markdown", "decision_diagram", "constraint_map",
-    "stack_diagram", "mr_description",
-]
+__all__ = ["receipt", "generated_markdown", "decision_diagram", "stack_diagram", "mr_description"]
 
 PLACEHOLDER = "_to fill in from the repository_"
 MODE_TEXT = {
@@ -138,120 +134,21 @@ def decision_diagram(spec, space, max_nodes=60):
     return "\n".join(lines)
 
 
-def _opt_id(d, o):
-    return f"o_{_mid(d)}__{_mid(o)}"
-
-
-def constraint_map(spec, space, plan):
-    """Dimensions as boxes, options inside, constraints as edges."""
-    if not spec.constraints and not any(d.applies_when for d in spec.dimensions.values()):
-        return None
-    lines = ["flowchart LR"]
-    noop, dead, out = [], [], []
-    for d, dim in spec.dimensions.items():
-        lines.append(f'  subgraph d_{_mid(d)}["{_label(dim.label)}"]')
-        lines.append("    direction TB")
-        for o in dim.options:
-            oid = _opt_id(d, o.id)
-            lines.append(f'    {oid}["{_label(o.id)}"]')
-            if o.id in space.dead_options.get(d, []) or d in space.dead_dimensions:
-                dead.append(oid)
-            elif o.id in plan.out_of_scope.get(d, []):
-                out.append(oid)
-            elif o.noop:
-                noop.append(oid)
-        lines.append("  end")
-
-    def endpoints(node, positive_values=True):
-        """Option ids for the positive reading of each atom in `node`."""
-        out_ids = []
-        for atom, negated in node.atoms():
-            positive = (atom.op in ("==", "in")) != negated
-            values = atom.values if positive else [o for o in spec.dimensions[atom.dim].option_ids if o not in atom.values]
-            out_ids.extend(_opt_id(atom.dim, v) for v in values)
-        return out_ids
-
-    for c in spec.constraints:
-        simple = (
-            c.kind != "never" and c.when is not None
-            and getattr(c.when, "op", None) == "==" and getattr(c.then, "op", None) in ("==", "!=")
-        )
-        if simple:
-            src = _opt_id(c.when.dim, c.when.values[0])
-            dst = _opt_id(c.then.dim, c.then.values[0])
-            requires = (c.kind == "requires") == (c.then.op == "==")
-            if requires:
-                lines.append(f'  {src} -->|"{c.id} requires"| {dst}')
-            else:
-                lines.append(f'  {src} --x|"{c.id} excludes"| {dst}')
-            continue
-        hid = f"c_{_mid(c.id)}"
-        lines.append(f'  {hid}{{{{"{_label(c.id)}"}}}}')
-        if c.kind == "never":
-            for oid in endpoints(c.then):
-                lines.append(f"  {hid} --- {oid}")
-            continue
-        if c.when is not None:
-            for oid in endpoints(c.when):
-                lines.append(f"  {oid} --- {hid}")
-        for atom, negated in c.then.atoms():
-            positive = (atom.op in ("==", "in")) != negated
-            requires = (c.kind == "requires") == positive
-            for v in atom.values:
-                arrow = f'-->|"requires"|' if requires else f'--x|"excludes"|'
-                lines.append(f"  {hid} {arrow} {_opt_id(atom.dim, v)}")
-
-    for d, dim in spec.dimensions.items():
-        if dim.applies_when is None:
-            continue
-        for oid in endpoints(dim.applies_when):
-            lines.append(f'  {oid} -.->|"enables"| d_{_mid(d)}')
-
-    if noop:
-        lines.append("  classDef noop stroke-dasharray:4 3")
-        lines.append(f"  class {','.join(noop)} noop")
-    if out:
-        lines.append("  classDef out stroke-dasharray:2 2,color:#888")
-        lines.append(f"  class {','.join(out)} out")
-    if dead:
-        lines.append("  classDef dead fill:#fdecea,stroke:#c0392b,color:#8e1b10")
-        lines.append(f"  class {','.join(dead)} dead")
-    return "\n".join(lines)
-
-
-STATUS_CLASS = {
-    "branched": "fill:#fff8e1,stroke:#f9a825",
-    "mr-open": "fill:#e3f2fd,stroke:#1565c0",
-    "merged": "fill:#e8f5e9,stroke:#2e7d32",
-}
-
-
-def stack_diagram(plan, stack, state):
+def stack_diagram(plan, stack):
     by_id = plan.by_id
     base = _mid(stack.base_branch)
     lines = ["flowchart TD", f'  {base}(["{_label(stack.base_branch)}"])']
-    classes = {}
     for nid in stack.order:
-        node = by_id[nid]
-        sid = "s_" + _mid(nid)
-        lines.append(f'  {sid}["{_label(node.title)}<br/><small>{_label(nid)}</small>"]')
-        status = state.get(nid, {}).get("status", "planned")
-        if status in STATUS_CLASS:
-            classes.setdefault(status, []).append(sid)
+        lines.append(f'  s_{_mid(nid)}["{_label(by_id[nid].title)}<br/><small>{_label(nid)}</small>"]')
     for nid in stack.order:
         p = stack.placements[nid]
         sid = "s_" + _mid(nid)
         if p.parent is None and p.wave > 0:
-            waits = ", ".join(p.waits_for)
-            lines.append(f'  {base} -.->|"wave {p.wave + 1}, after {_label(waits)}"| {sid}')
+            lines.append(f'  {base} -.->|"wave {p.wave + 1}, after {_label(", ".join(p.waits_for))}"| {sid}')
         elif p.parent is None:
             lines.append(f"  {base} --> {sid}")
         else:
             lines.append(f"  s_{_mid(p.parent)} --> {sid}")
-    for status, ids in classes.items():
-        name = _mid(status)
-        lines.append(f"  classDef {name} {STATUS_CLASS[status]}")
-        lines.append(f"  class {','.join(ids)} {name}")
     return "\n".join(lines)
 
 
@@ -378,27 +275,20 @@ def _variant_cell(value):
     return "n/a" if value is None else f"`{value}`"
 
 
-def _node_block(spec, result, node, number, state, doc_path):
-    plan, stack = result.plan, result.stack
+def _node_block(spec, result, node, number, doc_path):
+    stack, plan = result.stack, result.plan
     p = stack.placements[node.id]
-    st = state.get(node.id, {})
-    lines = [f"### {number}. {node.title}", "", node.purpose, ""]
-    deps = ", ".join(f"`{d}`" for d in node.depends_on) or "nothing (starts the stack)"
-    target = effective_onto(stack, state, node.id)
-    onto = f"`{target}`" + (f" in wave {p.wave + 1}" if p.wave else "")
-    if target != p.parent_branch:
-        onto += f" (parent `{p.parent_branch}` is merged)"
-    rows = [
-        ("Node", f"`{node.id}` ({node.kind})"),
-        ("Decisions", ", ".join(f"`{d}`" for d in node.decisions)),
-        ("Scope", node.scope),
-        ("Depends on", deps),
-    ]
+    onto = f"`{p.parent_branch}`" + (f" (wave {p.wave + 1})" if p.wave else "")
     why = list(node.notes_derived)
     if p.grafted_for:
         why.append(f"stacked on `{p.parent}` so that `{p.grafted_for}` can build on both")
     if p.waits_for:
         why.append(f"starts after {', '.join(f'`{w}`' for w in p.waits_for)} merged, because they sit on separate lanes")
+    rows = [
+        ("Decisions", ", ".join(f"`{d}`" for d in node.decisions)),
+        ("Scope", node.scope),
+        ("Depends on", ", ".join(f"`{d}`" for d in node.depends_on) or "nothing (starts the stack)"),
+    ]
     if why:
         rows.append(("Why", "; ".join(why)))
     rows += [
@@ -406,41 +296,35 @@ def _node_block(spec, result, node, number, state, doc_path):
         ("Expected files", ", ".join(f"`{f}`" for f in node.files) if node.files else PLACEHOLDER),
         ("Risk / complexity", f"{node.risk} / {node.complexity}"),
         ("Branch", f"`{p.branch}` onto {onto}"),
-        ("Status", st.get("status", "planned") + (f" ({st['mr']})" if st.get("mr") else "")),
     ]
-    lines += ["| | |", "|---|---|"]
-    for key, value in rows:
-        lines.append(f"| {key} | {str(value).replace('|', '/')} |")
+    lines = [
+        f"<details><summary><b>{number}. {node.title}</b> <code>{node.id}</code></summary>",
+        "",
+        node.purpose,
+        "",
+        "| | |",
+        "|---|---|",
+    ]
+    lines += [f"| {k} | {str(v).replace('|', '/')} |" for k, v in rows]
     lines += ["", f"**Guidance.** {node.guidance or GUIDANCE[node.kind]}", ""]
     if node.notes:
         lines += [f"**Notes.** {node.notes}", ""]
     if node.changes:
         lines += ["**Contract changes**"] + [f"- `{c}`" for c in node.changes] + [""]
-    if st.get("needs_update"):
-        lines += ["**Needs update (branch already started)**"] + [f"- `{c}`" for c in st["needs_update"]] + [""]
-    lines.append("**Tests**")
-    for t in node.tests:
-        lines.append(f"- {t}")
+    lines += ["**Tests**"] + [f"- {t}" for t in node.tests]
     if node.scenarios:
         lines.append(f"- Scenarios: {_scenario_list(node.scenarios)}")
-    lines += ["", "**Acceptance criteria**"]
-    for a in node.acceptance:
-        lines.append(f"- [ ] {a}")
+    lines += ["", "**Acceptance criteria**"] + [f"- [ ] {a}" for a in node.acceptance]
     lines += [
-        "",
-        "<details><summary>MR description</summary>",
-        "",
+        "", "**MR description**", "",
         _fence("markdown", mr_description(spec, node, stack, plan, doc_path)),
-        "",
-        "</details>",
-        "",
+        "", "</details>", "",
     ]
     return lines
 
 
-def generated_markdown(result, state=None, doc_path=None, doc_status="draft"):
+def generated_markdown(result, doc_path=None):
     spec, space, sc, plan, stack = result.spec, result.space, result.scenarios, result.plan, result.stack
-    state = state or {}
     dims = space.dims
     L = []
 
@@ -455,14 +339,6 @@ def generated_markdown(result, state=None, doc_path=None, doc_status="draft"):
     L.append(f"| Implementation nodes (MRs) | {len(plan.nodes)} |")
     L.append("")
 
-    status_text = {
-        "draft": "Draft. Waiting for sign-off.",
-        "approved": "Approved. Ready to implement.",
-        "implementing": "Approved and in progress.",
-        "done": "Done.",
-    }.get(doc_status, doc_status)
-    L.append(f"**Plan status:** {status_text}")
-    L.append("")
     if result.confirmations:
         L.append("**Needs confirmation:**")
         for c in result.confirmations:
@@ -508,9 +384,6 @@ def generated_markdown(result, state=None, doc_path=None, doc_status="draft"):
                 note = f"{r.finding}. {c.reason}"
             L.append(f"| {c.id} | `{c.text}` | {r.removes_alone} | {r.removes_only} | {note} |")
         L.append("")
-    cmap = constraint_map(spec, space, plan)
-    if cmap:
-        L += ["<details><summary>Constraint map</summary>", "", _fence("mermaid", cmap), "", "</details>", ""]
 
     L += ["### Findings", ""]
     if result.findings:
@@ -530,26 +403,22 @@ def generated_markdown(result, state=None, doc_path=None, doc_status="draft"):
         f"configurable from {kinds.count('option') + kinds.count('dimension')} option and abstraction MRs."
     )
     L.append("")
-    L += ["### MR stack", "", _fence("mermaid", stack_diagram(plan, stack, state)), ""]
-    L += ["| # | Node | Branch | Onto | Status |", "|---:|---|---|---|---|"]
+    L += ["### MR stack", "", _fence("mermaid", stack_diagram(plan, stack)), ""]
+    L += ["| # | Node | Branch | Onto |", "|---:|---|---|---|"]
     for n, nid in enumerate(stack.order, 1):
         p = stack.placements[nid]
-        st = state.get(nid, {})
-        status = st.get("status", "planned") + (f" {st['mr']}" if st.get("mr") else "")
-        if st.get("restack_from"):
-            status += f", restack from `{st['restack_from']}`"
-        onto = f"`{effective_onto(stack, state, nid)}`" + (f" (wave {p.wave + 1})" if p.wave else "")
-        L.append(f"| {n} | `{nid}` | `{p.branch}` | {onto} | {status} |")
+        onto = f"`{p.parent_branch}`" + (f" (wave {p.wave + 1})" if p.wave else "")
+        L.append(f"| {n} | `{nid}` | `{p.branch}` | {onto} |")
     L.append("")
     L.append(
-        f"Layout: {stack.layout}. Merge order is the table order. After a parent merges, "
-        f"retarget its children to `{stack.base_branch}` (see `cad.py stack`)."
+        f"Layout: {stack.layout}. Merge order is the table order. Progress lives in git; "
+        f"`cad.py stack` shows what exists and what comes next."
     )
     L.append("")
 
     L += ["### Nodes", ""]
     for n, nid in enumerate(stack.order, 1):
-        L += _node_block(spec, result, plan.by_id[nid], n, state, doc_path)
+        L += _node_block(spec, result, plan.by_id[nid], n, doc_path)
 
     L += ["## Test matrix", ""]
     mode = spec.mode

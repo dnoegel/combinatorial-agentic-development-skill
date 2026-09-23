@@ -3,7 +3,6 @@
 import argparse
 import json
 import os
-import subprocess
 import sys
 
 from . import brief as brief_mod
@@ -159,32 +158,6 @@ def cmd_render(args):
     return 0
 
 
-def cmd_approve(args):
-    result = document.approve(args.doc, args.by, date=args.date)
-    print(f"Approved. {len(result.plan.nodes)} nodes are ready to implement in stack order.")
-    return 0
-
-
-def cmd_check(args):
-    ok, message = document.check(args.doc)
-    print(message)
-    return 0 if ok else 1
-
-
-def _detect_platform():
-    try:
-        url = subprocess.run(
-            ["git", "remote", "get-url", "origin"], capture_output=True, text=True, check=False
-        ).stdout.lower()
-    except OSError:
-        return "none"
-    if "github" in url:
-        return "github"
-    if "gitlab" in url:
-        return "gitlab"
-    return "none"
-
-
 def _repo_for(args):
     """The git repository the plan's branches live in, or None."""
     if getattr(args, "repo", None):
@@ -194,64 +167,38 @@ def _repo_for(args):
 
 
 def _load_plan(args):
+    """Spec, live progress from git and the resulting plan for a planning document."""
     doc = document.read(args.doc)
     spec = spec_mod.load(miniyaml.loads(doc.spec_text))
-    state = {k: dict(v or {}) for k, v in (doc.front.get("nodes") or {}).items()}
-    result = engine.run(spec, state=state, followups=doc.front.get("followups") or [])
+    followups = doc.front.get("followups") or []
+    result = engine.run(spec, followups=followups)
     if result.status == "error":
         raise document.DocError("The plan has errors. Run `cad.py render` for details.")
     repo = _repo_for(args)
+    state = {}
     if repo:
-        report = verify_mod.Report()
-        verify_mod.check_state(repo, result.stack, report)
-        for nid, status in report.nodes.items():
-            recorded = state.setdefault(nid, {}).get("status", "planned")
-            if recorded == "planned" or (status == "merged" and recorded != "merged"):
-                state[nid]["status"] = status
-    if repo:
-        # re-place with the live state, so started branches keep their actual parents
-        result = engine.run(spec, state=state, followups=doc.front.get("followups") or [])
+        state = document.git_state(args.doc, result, doc.front.get("nodes") or {}, repo=repo)
+        result = engine.run(spec, state=state, followups=followups)
     return doc, spec, state, result, repo
 
 
 def cmd_stack(args):
-    ok, message = document.check(args.doc)
-    if not ok and not args.preview:
-        return _fail(message + "\nUse --preview to see the steps without approval.")
     doc, spec, state, result, repo = _load_plan(args)
     remote = gitops.has_remote(repo) if repo else True
-    platform = args.platform or spec.stack["platform"]
-    if platform == "auto":
-        platform = _detect_platform()
-    desc_dir = args.write_descriptions or ".cad/mr"
-    steps = stack_mod.steps(result.plan, result.stack, state, platform, desc_dir, remote=remote)
-    if args.write_descriptions:
-        os.makedirs(desc_dir, exist_ok=True)
-        rel = os.path.relpath(args.doc)
-        for nid in result.stack.order:
-            p = result.stack.placements[nid]
-            text = render_mod.mr_description(spec, result.plan.by_id[nid], result.stack, result.plan, rel)
-            with open(os.path.join(desc_dir, p.branch.replace("/", "__") + ".md"), "w", encoding="utf-8") as fh:
-                fh.write(text + "\n")
+    steps = stack_mod.steps(result.plan, result.stack, state, remote=remote)
     if args.json:
-        print(json.dumps({"approved": ok, "platform": platform, "steps": steps}, indent=2))
+        print(json.dumps({"steps": steps}, indent=2))
         return 0
-    header = "PREVIEW (plan not approved)" if not ok else "Dry run"
-    print(f"# {header}: {spec.title}, {len(steps)} nodes, platform {platform}")
-    print("# Nothing below has been executed. Local steps are safe to run after approval;")
-    print("# push and MR commands need an explicit go from the engineer.")
+    done = sum(1 for s in steps if s["status"] != "planned")
+    print(f"# Dry run: {spec.title}, {len(steps)} nodes, {done} with a branch. Nothing below has been executed.")
     if not remote:
-        print("# No remote configured: branches start from the local base branch; push and MR steps omitted.")
-    elif platform == "none":
-        print("# No GitHub or GitLab remote detected: MR commands omitted (use --platform).")
-    if remote:
-        print("\ngit fetch origin")
+        print("# No remote configured: new branches start from the local base branch.")
     wave = 0
     for n, s in enumerate(steps, 1):
         if s["wave"] != wave:
             wave = s["wave"]
             print(f"\n# ---- wave {wave + 1}: start after every earlier wave is merged into {result.stack.base_branch}")
-        label = {"create": "", "restack": "RESTACK ", "keep": "up to date ", "done": "merged "}[s["action"]]
+        label = "" if s["status"] == "planned" else f"{s['status']} "
         print(f"\n# [{n}/{len(steps)}] {label}{s['node']}: {s['title']}  (onto {s['target']})")
         for c in s["commands"]:
             print(c)
@@ -264,10 +211,7 @@ def cmd_verify(args):
         return _fail("verify needs a git repository (use --repo).")
     if args.only and args.only not in result.plan.by_id:
         return _fail(f"unknown node {args.only!r}")
-    recorded = {k: (v or {}).get("status", "planned") for k, v in (doc.front.get("nodes") or {}).items()}
-    report = verify_mod.run(
-        repo, result, integration=args.integration, probe=args.probe, only=args.only, recorded=recorded
-    )
+    report = verify_mod.run(repo, result, integration=args.integration, probe=args.probe, only=args.only)
     if args.json:
         print(json.dumps({
             "ok": report.ok,
@@ -302,9 +246,6 @@ def cmd_verify(args):
 
 
 def cmd_brief(args):
-    ok, message = document.check(args.doc)
-    if not ok and not args.preview:
-        return _fail(message + "\nUse --preview to see a brief without approval.")
     doc, spec, state, result, repo = _load_plan(args)
     statuses = {k: v.get("status", "planned") for k, v in state.items()}
     node_id = args.node
@@ -388,24 +329,6 @@ def cmd_impact(args):
     return 0
 
 
-def cmd_mark(args):
-    repo = _repo_for(args)
-    if repo:
-        doc = document.read(args.doc)
-        base = spec_mod.load(miniyaml.loads(doc.spec_text)).stack["base_branch"]
-        current = gitops.current_branch(repo)
-        if current and current != base:
-            return _fail(
-                f"You are on `{current}`. Progress is recorded on `{base}` only, so feature branches "
-                f"never carry plan edits. Switch to `{base}` first."
-            )
-    document.mark(
-        args.doc, args.node, args.status, mr=args.mr, restacked=args.restacked, updated=args.updated, date=args.date
-    )
-    print(f"{args.node}: {args.status}" + (f" ({args.mr})" if args.mr else ""))
-    return 0
-
-
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="cad.py",
@@ -434,22 +357,9 @@ def build_parser():
     p.add_argument("--date", help=argparse.SUPPRESS)
     p.set_defaults(func=cmd_render)
 
-    p = sub.add_parser("approve", help="record sign-off, bound to the current spec")
-    p.add_argument("doc")
-    p.add_argument("--by", required=True)
-    p.add_argument("--date", help=argparse.SUPPRESS)
-    p.set_defaults(func=cmd_approve)
-
-    p = sub.add_parser("check", help="exit 0 only if the current spec is approved")
-    p.add_argument("doc")
-    p.set_defaults(func=cmd_check)
-
     p = sub.add_parser("stack", help="print the dry-run branch and MR steps")
     p.add_argument("doc")
     p.add_argument("--repo")
-    p.add_argument("--platform", choices=spec_mod.PLATFORMS)
-    p.add_argument("--preview", action="store_true", help="show steps even if the plan is not approved")
-    p.add_argument("--write-descriptions", metavar="DIR", help="write MR descriptions as Markdown files")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_stack)
 
@@ -481,19 +391,8 @@ def build_parser():
     p.add_argument("node", nargs="?")
     p.add_argument("--next", action="store_true", help="the next node without a branch")
     p.add_argument("--repo")
-    p.add_argument("--preview", action="store_true", help="allow a brief before approval")
     p.set_defaults(func=cmd_brief)
 
-    p = sub.add_parser("mark", help="record progress for a node")
-    p.add_argument("--repo")
-    p.add_argument("doc")
-    p.add_argument("node")
-    p.add_argument("--status", required=True, choices=document.STATUSES)
-    p.add_argument("--mr", help="MR or PR reference, e.g. !42 or #42")
-    p.add_argument("--restacked", action="store_true", help="the branch was rebased onto its new parent")
-    p.add_argument("--updated", action="store_true", help="the branch was amended to its changed contract")
-    p.add_argument("--date", help=argparse.SUPPRESS)
-    p.set_defaults(func=cmd_mark)
     return parser
 
 

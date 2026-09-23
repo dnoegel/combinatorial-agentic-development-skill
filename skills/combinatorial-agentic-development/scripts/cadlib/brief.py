@@ -42,7 +42,7 @@ def brief(result, node_id, statuses, doc_path, start_ref):
     probe = spec.verify.get("probe")
 
     L = [f"# Brief: `{node_id}`, {node.title}", ""]
-    L.append(f"Part of the {spec.title} plan ({doc_path}). The plan is approved; do not edit it.")
+    L.append(f"Part of the {spec.title} plan ({doc_path}). Do not edit the plan.")
     L += [
         "", "## Branch", "", "```bash",
         f"git switch -c {p.branch} {start}",

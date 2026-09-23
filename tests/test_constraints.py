@@ -136,19 +136,9 @@ class LimitsTest(unittest.TestCase):
     def test_primary_example_needs_confirmation(self):
         result = run_fixture("lead-capture-flow.yaml")
         self.assertEqual(result.status, "needs-confirmation")
-        text = " ".join(result.confirmations)
-        self.assertIn("42 targeted variants exceed max_valid_variants (20)", text)
-        self.assertIn("13 implementation nodes exceed max_implementation_nodes (12)", text)
-        self.assertIn("13 new MRs in this revision exceed require_confirmation_above (8)", text)
+        self.assertEqual(result.confirmations, ["42 targeted variants exceed max_variants (20)."])
         self.assertEqual(result.suggestions[0], "proceed as planned")
         self.assertIn("switch the test matrix to pairwise", result.suggestions)
-
-    def test_updates_only_count_new_nodes(self):
-        first = run_fixture("lead-capture-flow.yaml")
-        known = set(first.plan.by_id)
-        second = run_fixture("lead-capture-flow-html-email.yaml", known_nodes=known)
-        self.assertEqual(second.new_nodes, 4)
-        self.assertFalse(any("require_confirmation_above" in c for c in second.confirmations))
 
 
 if __name__ == "__main__":

@@ -76,16 +76,14 @@ generation:
     - {channel: website, pdf_delivery: email, email_capture: before_test, crm_sync: hubspot}
 
 limits:                             # defaults shown
-  max_valid_variants: 32            # targeted variants above this need confirmation
-  max_implementation_nodes: 20      # plan nodes above this need confirmation
-  require_confirmation_above: 12    # new MRs in one revision above this need confirmation
+  max_variants: 32                  # targeted variants above this need a confirmation
   max_enumeration: 100000           # theoretical combinations above this are refused
 
 stack:
   base_branch: main
   branch_prefix: lead-capture-flow  # default: feature
   layout: tree                      # tree | linear
-  platform: auto                    # auto | gitlab | github | none
+  max_coupling: 2                   # most nodes a graft may stack on code they do not need
 
 verify:                             # see verification.md
   test: node --test                 # runs on all branches merged together

@@ -17,7 +17,7 @@ class LoadTest(unittest.TestCase):
         self.assertEqual(spec.title, "Lead capture flow")
         self.assertEqual(list(spec.dimensions), ["channel", "pdf_delivery", "email_capture", "crm_sync"])
         self.assertEqual(len(spec.constraints), 2)
-        self.assertEqual(spec.limits["max_valid_variants"], 20)
+        self.assertEqual(spec.limits["max_variants"], 20)
         self.assertEqual(spec.limits["max_enumeration"], 100000)
 
     def test_noop_defaults_and_overrides(self):
@@ -86,12 +86,12 @@ class LoadTest(unittest.TestCase):
 
     def test_bad_limits(self):
         with self.assertRaisesRegex(SpecError, "positive integer"):
-            load(base(limits={"max_valid_variants": 0}))
+            load(base(limits={"max_variants": 0}))
 
     def test_unknown_keys_warn(self):
-        spec = load(base(dimension_notes="x", limits={"max_variants": 3}))
+        spec = load(base(dimension_notes="x", limits={"max_variant": 3}))
         self.assertTrue(any("dimension_notes" in w for w in spec.warnings))
-        self.assertTrue(any("max_variants" in w for w in spec.warnings))
+        self.assertTrue(any("did you mean 'max_variants'" in w for w in spec.warnings))
 
 
 class HelpersTest(unittest.TestCase):

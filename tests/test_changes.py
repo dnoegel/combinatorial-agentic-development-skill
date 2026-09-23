@@ -96,8 +96,8 @@ class ContractChangeTest(GitRepoCase):
         self.assertIn("+ rule: never theme == dark and sync == crm", front["followups"][0]["changes"])
         node = result.plan.by_id["base.r2"]
         self.assertEqual(node.kind, "followup")
-        # stacked on the merged base, so it targets main
-        self.assertIn("`shop/base-r2` onto `main` (parent `shop/base` is merged)", open(self.doc, encoding="utf-8").read())
+        # stacked on the merged base, so the dry run starts it from main
+        self.assertIn("git switch -c shop/base-r2 main", cad("stack", self.doc, cwd=self.repo).stdout)
         # planned work that builds on base now builds on the revision
         self.assertIn("base.r2", result.plan.by_id["dim.theme"].depends_on)
         text = open(self.doc, encoding="utf-8").read()
@@ -107,21 +107,38 @@ class ContractChangeTest(GitRepoCase):
         document.render(self.doc)
         self.assertEqual(len(document.read(self.doc).front["followups"]), 1)
 
-    def test_open_node_is_flagged_for_update(self):
+    def test_open_node_change_is_logged_once(self):
         self.build_stack()
         document.render(self.doc)
         self.edit_spec(lambda raw: raw["dimensions"]["theme"].append("blue"))
         document.render(self.doc, note="A blue theme.")
-        front = document.read(self.doc).front
-        self.assertIn("+ decision: theme in [light, dark, blue]", front["nodes"]["dim.theme"]["needs_update"])
-        self.assertNotIn("needs_update", front["nodes"]["opt.theme.light"])
         text = open(self.doc, encoding="utf-8").read()
-        self.assertIn("Needs update: `dim.theme` is branched", text)
-        self.assertIn("**Needs update (branch already started)**", text)
-        document.approve(self.doc, "Dana")
-        proc = cad("mark", self.doc, "dim.theme", "--status", "branched", "--updated", cwd=self.repo)
-        self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertNotIn("needs_update", document.read(self.doc).front["nodes"]["dim.theme"])
+        self.assertIn("Changed after work started: `dim.theme` (+ decision: theme in [light, dark, blue]", text)
+        self.assertNotIn("Changed after work started: `opt.theme.light`", text)
+        document.render(self.doc)
+        self.assertEqual(open(self.doc, encoding="utf-8").read().count("Changed after work started: `dim.theme`"), 1)
+
+
+class LayoutChangeTest(GitRepoCase):
+    edit_spec = ContractChangeTest.edit_spec
+
+    def test_restack_is_reported_when_a_started_branch_needs_a_new_parent(self):
+        self.build_stack()
+        document.render(self.doc)  # records where each branch was built
+        self.edit_spec(lambda raw: raw.setdefault("constraints", []).append(
+            {"if": "theme == dark", "requires": "sync == crm"}))
+        result, _ = document.render(self.doc, note="Dark theme needs the CRM.")
+        text = open(self.doc, encoding="utf-8").read()
+        self.assertIn("Restack needed: `opt.theme.dark` from `shop/theme`", text)
+        self.assertNotEqual(result.stack.placements["opt.theme.dark"].parent, "dim.theme")
+
+    def test_branches_for_removed_nodes_are_reported(self):
+        self.build_stack()
+        document.render(self.doc)
+        self.edit_spec(lambda raw: raw["dimensions"].__setitem__("theme", ["light"]))
+        document.render(self.doc, note="Only a light theme.")
+        text = open(self.doc, encoding="utf-8").read()
+        self.assertIn("Branches exist for nodes no longer planned: `opt.theme.dark`", text)
 
 
 class ImpactTest(GitRepoCase):

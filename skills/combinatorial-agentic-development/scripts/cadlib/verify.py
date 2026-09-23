@@ -236,15 +236,9 @@ def check_probe(cwd, spec, scenarios, dims, report, probe_cmd):
         report.notes.append(f"probe: all {len(scenarios)} scenarios show exactly their selected options")
 
 
-def check_hygiene(repo, result, recorded, report):
-    """Warnings that do not fail verify: stale plan document, stray worktrees, file ownership."""
+def check_hygiene(repo, result, report):
+    """Warnings that do not fail verify: stray worktrees and file ownership."""
     stack, plan = result.stack, result.plan
-    behind = [n for n, status in report.nodes.items() if status != "planned" and recorded.get(n, "planned") == "planned"]
-    if behind:
-        report.warnings.append(
-            f"the plan document still shows {len(behind)} node(s) as planned although their branches exist; "
-            f"run `cad.py render <doc>` on `{stack.base_branch}` and commit it"
-        )
     main_tree = os.path.realpath(gitops.toplevel(repo))
     listing = gitops.git(repo, "worktree", "list", "--porcelain", check=False).stdout
     for block in listing.strip().split("\n\n"):
@@ -281,12 +275,11 @@ def check_hygiene(repo, result, recorded, report):
             )
 
 
-def run(repo, result, integration=False, probe=False, only=None, recorded=None):
+def run(repo, result, integration=False, probe=False, only=None):
     spec, stack = result.spec, result.stack
     report = Report()
     check_state(repo, stack, report)
-    if recorded is not None:
-        check_hygiene(repo, result, recorded, report)
+    check_hygiene(repo, result, report)
     scenarios = [(f"T{i:02d}", v) for i, v in enumerate(result.scenarios.variants, 1)]
     if only:
         from .plan import dependents

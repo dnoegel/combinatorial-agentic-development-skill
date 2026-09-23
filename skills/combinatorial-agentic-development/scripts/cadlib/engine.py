@@ -23,7 +23,6 @@ class Result:
     findings: list = field(default_factory=list)
     confirmations: list = field(default_factory=list)
     suggestions: list = field(default_factory=list)
-    new_nodes: int = 0
 
     @property
     def errors(self):
@@ -38,11 +37,11 @@ class Result:
         return "ok"
 
 
-def run(spec, known_nodes=None, state=None, followups=None):
+def run(spec, state=None, followups=None):
     """Analyze a spec.
 
-    `known_nodes` lists node ids from the previous revision, `state` holds
-    recorded progress per node so placement never moves started work.
+    `state` holds progress per node (from git) so placement never moves
+    started work; `followups` are revisions planned for merged nodes.
     """
     result = Result(spec=spec)
     for w in spec.warnings:
@@ -126,36 +125,17 @@ def run(spec, known_nodes=None, state=None, followups=None):
             "Their merges will conflict: move the file to a common ancestor node or discover modules at runtime.",
         ))
 
-    limits = spec.limits
+    limit = spec.limits["max_variants"]
     targeted = len(scenarios.variants)
-    nodes = len(plan.nodes)
-    new = nodes if known_nodes is None else sum(1 for n in plan.nodes if n.id not in known_nodes)
-    result.new_nodes = new
-    if targeted > limits["max_valid_variants"]:
-        result.confirmations.append(
-            f"{targeted} targeted variants exceed max_valid_variants ({limits['max_valid_variants']})."
-        )
+    if targeted > limit:
+        result.confirmations.append(f"{targeted} targeted variants exceed max_variants ({limit}).")
+        result.suggestions = ["proceed as planned"]
         if spec.mode == "exhaustive":
             result.suggestions.append("switch the test matrix to pairwise")
-        result.suggestions.append("add a constraint that rules out combinations nobody wants")
-    if nodes > limits["max_implementation_nodes"]:
-        result.confirmations.append(
-            f"{nodes} implementation nodes exceed max_implementation_nodes ({limits['max_implementation_nodes']})."
-        )
-        result.suggestions.append("bundle small dimensions (`bundle: true`) into one MR each")
-    if new > limits["require_confirmation_above"]:
-        result.confirmations.append(
-            f"{new} new MRs in this revision exceed require_confirmation_above ({limits['require_confirmation_above']})."
-        )
-        result.suggestions.append("split the feature into smaller decision spaces")
-    if result.confirmations:
-        result.suggestions.insert(0, "proceed as planned")
-        result.suggestions.append("raise the limits in the spec on purpose")
-        seen = []
-        for s in result.suggestions:
-            if s not in seen:
-                seen.append(s)
-        result.suggestions = seen
+        result.suggestions += [
+            "add a constraint that rules out combinations nobody wants",
+            "raise limits.max_variants on purpose",
+        ]
     return result
 
 

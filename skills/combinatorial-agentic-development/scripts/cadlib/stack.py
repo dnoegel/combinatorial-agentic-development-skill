@@ -54,14 +54,6 @@ class Stack:
         parents = {p.parent for p in self.placements.values()}
         return sum(1 for nid in self.placements if nid not in parents)
 
-    def depth(self, node_id):
-        depth = 0
-        cur = node_id
-        while cur is not None:
-            depth += 1
-            cur = self.placements[cur].parent
-        return depth
-
     def children(self, node_id):
         return [n for n in self.order if self.placements[n].parent == node_id]
 
@@ -290,77 +282,26 @@ def _q(text):
     return shlex.quote(text)
 
 
-def steps(plan, stack, state, platform, descriptions_dir=".cad/mr", remote=True):
-    """Describe the dry-run steps for every node, respecting recorded progress.
+def steps(plan, stack, state, remote=True):
+    """Dry-run git steps, in stack order, for every node that has no branch yet.
 
-    `state` maps node id to {status, mr, restack_from}. Without a remote, root
-    branches start from the local base branch and push/MR commands are left out.
-    Returns a list of dicts with a `node`, `action` and `commands` list.
+    `state` maps node id to {"status": ...} as read from git. Without a remote,
+    root branches start from the local base branch.
     """
     out = []
     base = stack.base_branch
-    if not remote:
-        platform = "none"
-    by_id = plan.by_id
     for nid in stack.order:
         p = stack.placements[nid]
-        node = by_id[nid]
-        st = state.get(nid, {})
-        status = st.get("status", "planned")
-        parent_status = state.get(p.parent, {}).get("status") if p.parent else None
-        onto = base if parent_status == "merged" or p.parent is None else p.parent_branch
+        status = (state.get(nid) or {}).get("status", "planned")
+        onto = effective_onto(stack, state, nid)
         start = (f"origin/{base}" if remote else base) if onto == base else onto
-        entry = {
-            "node": nid,
-            "title": node.title,
-            "branch": p.branch,
-            "target": onto,
-            "wave": p.wave,
-            "status": status,
-            "action": "",
-            "commands": [],
-        }
-        desc = f"{descriptions_dir}/{p.branch.replace('/', '__')}.md"
-        if status == "merged":
-            entry["action"] = "done"
-        elif status == "planned":
-            entry["action"] = "create"
+        entry = {"node": nid, "title": plan.by_id[nid].title, "branch": p.branch, "target": onto,
+                 "wave": p.wave, "status": status, "commands": []}
+        if status == "planned":
             entry["commands"] = [
                 f"git switch -c {_q(p.branch)} {_q(start)}",
                 f"git update-ref refs/cad/base/{p.branch} {_q(start)}",
                 f"# implement {nid} (cad.py brief <doc> {nid}), run its tests, commit",
             ]
-            if remote:
-                entry["commands"].append(f"git push -u origin {_q(p.branch)}")
-            if platform == "gitlab":
-                entry["commands"].append(
-                    f"glab mr create --draft --source-branch {_q(p.branch)} --target-branch {_q(onto)} "
-                    f"--title {_q(node.title)} --description \"$(cat {_q(desc)})\" --yes"
-                )
-            elif platform == "github":
-                entry["commands"].append(
-                    f"gh pr create --draft --head {_q(p.branch)} --base {_q(onto)} "
-                    f"--title {_q(node.title)} --body-file {_q(desc)}"
-                )
-        else:
-            old = st.get("restack_from")
-            if old or parent_status == "merged":
-                entry["action"] = "restack"
-                old_base = old or p.parent_branch
-                if parent_status == "merged":
-                    old_base = p.parent_branch
-                entry["commands"] = [f"git rebase --onto {_q(start)} {_q(old_base)} {_q(p.branch)}"]
-                if remote:
-                    entry["commands"] = ["git fetch origin"] + entry["commands"] + [
-                        f"git push --force-with-lease origin {_q(p.branch)}"
-                    ]
-                mr = st.get("mr")
-                if status == "mr-open" and mr:
-                    if platform == "gitlab":
-                        entry["commands"].append(f"glab mr update {_q(str(mr).lstrip('!#'))} --target-branch {_q(onto)}")
-                    elif platform == "github":
-                        entry["commands"].append(f"gh pr edit {_q(str(mr).lstrip('!#'))} --base {_q(onto)}")
-            else:
-                entry["action"] = "keep"
         out.append(entry)
     return out

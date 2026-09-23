@@ -234,21 +234,15 @@
     "limits": {
       "type": "object",
       "properties": {
-        "max_valid_variants": {
+        "max_variants": {
           "type": "integer",
-          "minimum": 1
-        },
-        "max_implementation_nodes": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "require_confirmation_above": {
-          "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "Targeted variants above this need a confirmation."
         },
         "max_enumeration": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "Theoretical combinations above this are refused."
         }
       }
     },
@@ -267,13 +261,10 @@
             "linear"
           ]
         },
-        "platform": {
-          "enum": [
-            "auto",
-            "gitlab",
-            "github",
-            "none"
-          ]
+        "max_coupling": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Most nodes a graft may stack on code they do not need."
         }
       }
     },

@@ -4,11 +4,11 @@ Decisions change while the stack is half built. There are two kinds of change, a
 
 ## 1. The decision space changes (the spec)
 
-Someone adds an option, drops one, adds a constraint, or a dimension becomes conditional. Handle it like any spec change: read back, `analyze`, confirm, `render`. The sign-off is cleared, and `render` reports:
+Someone adds an option, drops one, adds a constraint, or a dimension becomes conditional. Handle it like any spec change: read back, `analyze`, confirm, `render`. `render` reports:
 
-- **Added and removed nodes.** Started work that is no longer planned is kept and marked obsolete; close or revert those MRs on purpose.
-- **Restack needed.** A started branch whose planned parent changed gets `restack_from`.
-- **Needs update.** Every node has a *contract*: its decisions, dependencies, scope and acceptance criteria. `render` keeps a snapshot for every started node. When the contract of a branched or open node changes, the node is flagged "needs update" with the exact difference. Amend the branch, restack its children, then `cad.py mark <doc> <node> --status <status> --updated`.
+- **Added and removed nodes.** Branches that exist for nodes that are no longer planned are listed; close or revert them on purpose.
+- **Restack needed.** A started branch whose planned parent changed is listed with its old and new parent; `cad.py restack` moves it.
+- **Changed after work started.** Every node has a *contract*: its decisions, dependencies, scope and acceptance criteria. `render` keeps a snapshot for every started node. When the contract of a branch that is not merged yet changes, the changelog names the node and the exact difference. Amend the branch, then restack its children.
 - **Follow-up.** When the contract of a **merged** node changes, `render` plans a follow-up node (`base.r2`, `dim.style.r3`, ...) with the difference as its acceptance criteria. It starts from the base branch, and planned nodes that build on the original now build on the follow-up. Merged history is never rewritten.
 
 ## 2. The code of a node changes (no spec change)

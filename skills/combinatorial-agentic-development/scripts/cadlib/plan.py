@@ -11,14 +11,13 @@ Work therefore grows with the number of options while variants grow with
 their product. Variants drive the test matrix.
 """
 
-import hashlib
 import re
 from dataclasses import dataclass, field
 
 from .spec import lower_label
 from .space import variant_env
 
-__all__ = ["Node", "Plan", "build", "contract", "fingerprint", "dependents"]
+__all__ = ["Node", "Plan", "build", "contract", "dependents"]
 
 
 @dataclass
@@ -56,12 +55,6 @@ class Plan:
     configurable: int  # valid variants buildable from implemented options
     skipped_edges: list = field(default_factory=list)
     unknown_enrichment: list = field(default_factory=list)
-
-    def node(self, node_id):
-        for n in self.nodes:
-            if n.id == node_id:
-                return n
-        raise KeyError(node_id)
 
     @property
     def by_id(self):
@@ -102,10 +95,6 @@ def contract(node):
     lines += [f"accept: {re.sub(r'[0-9]+', '#', a)}" for a in node.acceptance]
     lines += node.contract_extra
     return lines
-
-
-def fingerprint(node):
-    return hashlib.sha256("\n".join(contract(node)).encode("utf-8")).hexdigest()[:10]
 
 
 def dependents(plan, node_id):

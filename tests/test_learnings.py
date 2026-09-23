@@ -92,7 +92,7 @@ class TitleTest(unittest.TestCase):
 
 
 class HygieneTest(GitRepoCase):
-    def test_warnings_for_stale_doc_stray_worktree_and_ownership(self):
+    def test_warning_for_stray_worktree(self):
         self.build_stack()
         extra = os.path.join(self.tmp.name + "-preview")
         git(self.repo, "worktree", "add", "-q", "--detach", extra, "shop/theme")
@@ -100,7 +100,6 @@ class HygieneTest(GitRepoCase):
             code, data = self.verify()
             self.assertEqual(code, 0, data)  # warnings never fail verify
             text = "\n".join(data["warnings"])
-            self.assertIn("the plan document still shows 5 node(s) as planned", text)
             self.assertIn("extra worktree", text)
             self.assertIn("git worktree remove --force", text)
         finally:

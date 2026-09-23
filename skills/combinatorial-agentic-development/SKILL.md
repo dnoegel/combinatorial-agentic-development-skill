@@ -9,7 +9,7 @@ compatibility: Requires Python 3.9+ and git. No other dependencies.
 
 Why choose a product path when you can implement the whole decision space?
 
-The engineer describes a feature and its open decisions. You keep one planning document per feature. It shows every option, the valid variants, a reduced decision tree, a plan of shared foundations plus per-option work, a test matrix, and a stack of dependent MRs. Planning and implementation are two separate phases with a sign-off in between.
+The engineer describes a feature and its open decisions. You keep one planning document per feature. It shows every option, the valid variants, a reduced decision tree, a plan of shared foundations plus per-option work, a test matrix, and a stack of dependent MRs. Planning ends with the engineer's go; only then do branches appear.
 
 The tool computes. You judge. Never count variants, check constraints, or pick stack parents in your head: the script does that deterministically, and a planning document with wrong numbers is worse than none.
 
@@ -68,7 +68,7 @@ $CAD new docs/variants/<feature>.md --spec <spec.yaml> --intent "<one paragraph,
 $CAD render docs/variants/<feature>.md --note "<what changed and why, in a sentence>"
 ```
 
-`render` rewrites only the generated region and the front matter, appends a changelog entry, flags restacks for started branches, and clears a previous sign-off when the spec changed. If the spec is invalid, the document is left untouched.
+`render` rewrites only the generated region and the front matter, appends a changelog entry, and reports started branches that need a restack or changed after work started. If the spec is invalid, the document is left untouched.
 
 Document layout and ownership: [references/document-format.md](references/document-format.md).
 
@@ -78,21 +78,14 @@ Document layout and ownership: [references/document-format.md](references/docume
 - **Repository enrichment** (the spec's `plan:` section): after reading the code, fill in `components`, `files`, `guidance` and better titles per node id. This is what turns the plan into something implementable. Parallel nodes must not share files; the tool warns when they do.
 - **Verification** (the spec's `verify:` section): set `test` to the project's test command and `probe` to a command that reports which options it observes in the product for a given variant. Without a probe, nothing proves the options are wired in. See [references/verification.md](references/verification.md). Re-run `render`.
 
-### 5. Ask for sign-off
+### 5. Ask for the go
 
-Summarize the plan in a few lines (counts, MR count, anything that needs confirmation) and point the engineer to the document. Only when the engineer explicitly approves:
-
-```bash
-$CAD approve docs/variants/<feature>.md --by "<engineer name>"
-```
-
-The approval is bound to a hash of the spec. Any later spec change sends the document back to draft.
+Summarize the plan in a few lines (counts, MR count, anything that needs confirmation) and point the engineer to the document. Create branches only after the engineer says go in the conversation. If the spec changes afterwards, show the new plan and ask again.
 
 ## Phase 2: implement
 
 ```bash
-$CAD check docs/variants/<feature>.md          # must exit 0, otherwise stop and go back to phase 1
-$CAD stack docs/variants/<feature>.md          # dry run of every step, in stack order
+$CAD stack docs/variants/<feature>.md          # dry run of every step, in stack order, with what already exists
 $CAD brief docs/variants/<feature>.md --next   # exact instructions for the next node
 ```
 
@@ -100,7 +93,7 @@ For each node in stack order:
 
 1. Take the brief. It holds the branch command, scope, owned files, files not to touch, acceptance criteria and the commit format.
 2. Create the branch, implement exactly that scope, run the tests, commit.
-3. Never add commits to a branch that already has children. If you must, `verify` prints the restack.
+3. Never add commits to a branch that already has children. If you must, `verify` shows the cascade and `restack` fixes it.
 
 After every lane, and always before calling the work done:
 
@@ -108,17 +101,17 @@ After every lane, and always before calling the work done:
 $CAD verify docs/variants/<feature>.md --integration --probe
 ```
 
-`verify` checks that branches sit on their planned parents and contain their tips, merges everything into a temporary worktree, runs `verify.test`, and runs the probe for every targeted variant. The work is done when `verify` passes. Passing tests on each branch are not enough: options that were never wired into the product pass them too.
+`verify` checks that branches sit on their planned parents and contain their tips, merges everything into a temporary worktree, runs `verify.test`, and runs the probe for every targeted variant. It also warns about stray worktrees and files a branch edits outside its planned ownership. The work is done when `verify` passes. Passing tests on each branch are not enough: options that were never wired into the product pass them too.
 
 **Delegation.** Handing briefs to a cheaper model or a teammate is fine. Give one brief or one lane at a time, then run `verify` yourself. Never report a stack as done based on the implementer's summary.
 
-**Progress.** Branch state comes from git. Record MR references with `$CAD mark <doc> <node> --status mr-open --mr '!42'`, only while the base branch is checked out, so feature branches never carry plan edits.
+**Progress** lives in git: a branch that exists is started, a branch contained in the base branch is merged. Nothing needs to be recorded by hand.
 
-**Remote operations.** Local branches and commits are fine after approval. Pushing, opening MRs, force-pushing a restack and retargeting MRs are outward-facing: do them only when the engineer asks. `stack --write-descriptions .cad/mr` writes the MR bodies.
+**Remote operations.** Local branches and commits are fine after the go. Pushing, opening MRs and force-pushing a restack are outward-facing: do them only when the engineer asks. Each node's MR description is ready in the planning document.
 
 ## Changes in flight
 
-- **The decision space changes:** return to phase 1. `render` reports added and removed nodes, started branches that need a restack, open nodes whose contract changed ("needs update"), and plans a follow-up node (`base.r2`) for every merged node whose contract changed.
+- **The decision space changes:** return to phase 1. `render` reports added and removed nodes, started branches that need a restack or whose contract changed, and plans a follow-up node (`base.r2`) for every merged node whose contract changed.
 - **The code of a node changes:** run `$CAD impact <doc> <node>` first. Amend an open branch, then `$CAD restack <doc> <node>` (add `--execute` to run it locally) and `$CAD verify <doc> --integration --probe --only <node>`.
 - **Never rewrite merged history.** Changes to merged nodes become follow-ups or normal new branches.
 - **Land the trunk early.** Merging `base` and the abstractions first keeps later cascades short.
@@ -155,7 +148,7 @@ Never describe pairwise or t-wise results as covering every product. The documen
 - When a limit is exceeded, present the options the tool prints and wait. Raising a limit is the engineer's call.
 - Enumeration above `max_enumeration` is refused. Suggest splitting the feature or using `applies_when`.
 - Contradictory constraints, dead options, constraints that never fire and redundant constraints are reported by the tool. Explain them in plain words and suggest a fix.
-- No branches before `check` passes. No remote operations without an explicit request.
+- No branches before the engineer's go. No remote operations without an explicit request.
 - Nothing is done until `verify --integration --probe` passes.
 - Branch names, commits and MR text describe the work. Never mention the agent, AI assistance or tooling authorship.
 - Keep the premise light in conversation if the engineer enjoys it, and keep the document factual.
@@ -166,14 +159,11 @@ Never describe pairwise or t-wise results as covering every product. The documen
 |---|---|
 | `analyze <spec or doc> [--json] [--variants]` | Count, validate and plan without writing anything |
 | `new <doc> --spec <file> [--intent TEXT]` | Create a planning document |
-| `render <doc> [--note TEXT]` | Regenerate the plan, append changelog, flag restacks |
-| `approve <doc> --by NAME` | Record sign-off bound to the current spec |
-| `check <doc>` | Exit 0 only if the current spec is approved |
-| `stack <doc> [--platform gitlab/github/none] [--preview] [--write-descriptions DIR] [--json]` | Dry-run steps in stack order |
+| `render <doc> [--note TEXT]` | Regenerate the plan, append changelog, report restacks and follow-ups |
+| `stack <doc> [--json]` | Dry-run git steps in stack order, with progress read from git |
 | `brief <doc> [<node> or --next]` | Self-contained instructions for one node |
 | `verify <doc> [--integration] [--probe] [--only NODE] [--json]` | Compare the plan with git, integration and behavior |
 | `impact <doc> <node> [--json]` | Blast radius of changing a node: dependent code, stacked branches, scenarios |
 | `restack <doc> [<node>] [--execute]` | Rebase stale branches and everything built on them, parents first, local only |
-| `mark <doc> <node> --status planned/branched/mr-open/merged [--mr REF] [--restacked] [--updated]` | Record MR references and progress (base branch only) |
 
-JSON output follows [references/analysis.schema.json](references/analysis.schema.json); specs follow [references/spec.schema.json](references/spec.schema.json).
+Specs follow [references/spec.schema.json](references/spec.schema.json).

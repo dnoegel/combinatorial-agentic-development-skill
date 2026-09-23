@@ -31,6 +31,4 @@ generation:
   mode: exhaustive
 
 limits:
-  max_valid_variants: 20
-  max_implementation_nodes: 12
-  require_confirmation_above: 8
+  max_variants: 20
