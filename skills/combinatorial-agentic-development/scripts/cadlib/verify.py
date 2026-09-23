@@ -42,6 +42,7 @@ class Report:
     nodes: dict = field(default_factory=dict)  # node -> inferred status
     issues: list = field(default_factory=list)
     notes: list = field(default_factory=list)
+    warnings: list = field(default_factory=list)  # worth fixing, but not a failure
     probe: dict = field(default_factory=dict)  # summary numbers
 
     @property
@@ -235,10 +236,57 @@ def check_probe(cwd, spec, scenarios, dims, report, probe_cmd):
         report.notes.append(f"probe: all {len(scenarios)} scenarios show exactly their selected options")
 
 
-def run(repo, result, integration=False, probe=False, only=None):
+def check_hygiene(repo, result, recorded, report):
+    """Warnings that do not fail verify: stale plan document, stray worktrees, file ownership."""
+    stack, plan = result.stack, result.plan
+    behind = [n for n, status in report.nodes.items() if status != "planned" and recorded.get(n, "planned") == "planned"]
+    if behind:
+        report.warnings.append(
+            f"the plan document still shows {len(behind)} node(s) as planned although their branches exist; "
+            f"run `cad.py render <doc>` on `{stack.base_branch}` and commit it"
+        )
+    main_tree = os.path.realpath(gitops.toplevel(repo))
+    listing = gitops.git(repo, "worktree", "list", "--porcelain", check=False).stdout
+    for block in listing.strip().split("\n\n"):
+        lines = dict(line.split(" ", 1) if " " in line else (line, "") for line in block.splitlines())
+        path = lines.get("worktree", "")
+        if not path or os.path.realpath(path) == main_tree or "cad-verify-" in path:
+            continue
+        what = f"detached at {lines.get('HEAD', '')[:7]}" if "detached" in lines else lines.get("branch", "")
+        report.warnings.append(
+            f"extra worktree `{path}` ({what}); remove it when you are done: git worktree remove --force {shlex.quote(path)}"
+        )
+    owner = {f: n.id for n in plan.nodes for f in n.files}
+    for nid in stack.order:
+        node = plan.by_id[nid]
+        if report.nodes.get(nid) != "branched" or not node.files:
+            continue
+        p = stack.placements[nid]
+        parent = _effective_parent(stack, report.nodes, nid)
+        if not gitops.branch_exists(repo, parent):
+            continue
+        changed = gitops.git(repo, "diff", "--name-only", f"{parent}...{p.branch}", check=False).stdout.split()
+        foreign = sorted(f for f in changed if owner.get(f) not in (None, nid))
+        unlisted = sorted(f for f in changed if f not in owner)
+        if foreign:
+            report.warnings.append(
+                f"`{p.branch}` edits files owned by other nodes: "
+                + ", ".join(f"`{f}` ({owner[f]})" for f in foreign)
+                + "; move the change to the owning node or restack"
+            )
+        if unlisted:
+            report.warnings.append(
+                f"`{p.branch}` adds or edits files the plan does not list: {', '.join(f'`{f}`' for f in unlisted)}; "
+                f"add them to `plan.{nid}.files` so ownership and conflict checks can see them"
+            )
+
+
+def run(repo, result, integration=False, probe=False, only=None, recorded=None):
     spec, stack = result.spec, result.stack
     report = Report()
     check_state(repo, stack, report)
+    if recorded is not None:
+        check_hygiene(repo, result, recorded, report)
     scenarios = [(f"T{i:02d}", v) for i, v in enumerate(result.scenarios.variants, 1)]
     if only:
         from .plan import dependents

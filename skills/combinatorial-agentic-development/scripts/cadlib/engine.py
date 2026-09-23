@@ -101,7 +101,8 @@ def run(spec, known_nodes=None, state=None, followups=None):
         result.findings.append(Finding("info", f"Valid but not targeted by the selected variants, so not implemented: {names}."))
 
     stack = stack_mod.place(
-        plan, spec.stack["layout"], spec.stack["base_branch"], spec.stack["branch_prefix"], state=state
+        plan, spec.stack["layout"], spec.stack["base_branch"], spec.stack["branch_prefix"], state=state,
+        max_coupling=spec.stack["max_coupling"],
     )
     result.stack = stack
     for p in stack.placements.values():

@@ -63,6 +63,9 @@ def brief(result, node_id, statuses, doc_path, start_ref):
     L.append(f"- Owns: {', '.join(f'`{f}`' for f in node.files)}" if node.files else "- Owns: new files for this node only; keep them in the node's own module or directory.")
     if others:
         L.append(f"- Do not edit (owned by other nodes): {', '.join(f'`{f}`' for f in others)}")
+    noops = [o for d, o in node.options if spec.dimensions[d].option(o).noop] if node.kind == "dimension" else []
+    if noops:
+        L.append(f"- Also owns the no-op option(s) {', '.join(f'`{o}`' for o in noops)}; if they need their own files, name them in the report so the plan can list them.")
     L.append("- Never edit the planning document.")
     L += ["", "## Guidance", "", node.guidance or GUIDANCE[node.kind], ""]
     L += ["## Tests", ""] + [f"- {t}" for t in node.tests]
@@ -75,13 +78,15 @@ def brief(result, node_id, statuses, doc_path, start_ref):
         "## Commit",
         "",
         f"Subject: `{commit_subject(spec, node)}` (imperative, at most 72 characters).",
-        "Body: a blank line, then short bullet points of what changed. No tool or agent attribution.",
+        "Body: a blank line, then short bullet points of what this commit changes, wrapped at 72 characters. "
+        "Describe only changes that are in the commit. No tool or agent attribution.",
         "",
         "## Rules",
         "",
         "- Stay on this branch. Do not push, do not create other branches, do not rebase other branches.",
         "- Work that belongs to another node waits for that node.",
         "- If something in this brief cannot be done as written, stop and report it instead of working around it.",
+        "- To preview everything merged, use `cad.py verify <doc> --integration`; if you create a worktree yourself, remove it before you finish.",
         "- Report: the commit hash, the test output summary, and any deviation from this brief.",
     ]
     return "\n".join(L) + "\n"

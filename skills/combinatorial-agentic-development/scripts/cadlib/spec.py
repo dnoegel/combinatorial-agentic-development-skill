@@ -416,7 +416,11 @@ def load(raw):
         "branch_prefix": str(raw_stack.get("branch_prefix", feature)).strip("/"),
         "layout": str(raw_stack.get("layout", "tree")),
         "platform": str(raw_stack.get("platform", "auto")),
+        "max_coupling": raw_stack.get("max_coupling", 2),
     }
+    if not isinstance(stack["max_coupling"], int) or isinstance(stack["max_coupling"], bool) or stack["max_coupling"] < 0:
+        errors.append("stack.max_coupling must be a non-negative integer")
+        stack["max_coupling"] = 2
     for key in raw_stack:
         if key not in stack:
             warnings.append(f"stack.{key} is unknown{_suggest(key, stack)} and ignored")

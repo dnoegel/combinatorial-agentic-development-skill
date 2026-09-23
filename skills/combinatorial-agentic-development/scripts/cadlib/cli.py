@@ -208,9 +208,9 @@ def _load_plan(args):
             recorded = state.setdefault(nid, {}).get("status", "planned")
             if recorded == "planned" or (status == "merged" and recorded != "merged"):
                 state[nid]["status"] = status
-    followups = doc.front.get("followups") or []
-    if followups:
-        result = engine.run(spec, state=state, followups=followups)
+    if repo:
+        # re-place with the live state, so started branches keep their actual parents
+        result = engine.run(spec, state=state, followups=doc.front.get("followups") or [])
     return doc, spec, state, result, repo
 
 
@@ -264,13 +264,17 @@ def cmd_verify(args):
         return _fail("verify needs a git repository (use --repo).")
     if args.only and args.only not in result.plan.by_id:
         return _fail(f"unknown node {args.only!r}")
-    report = verify_mod.run(repo, result, integration=args.integration, probe=args.probe, only=args.only)
+    recorded = {k: (v or {}).get("status", "planned") for k, v in (doc.front.get("nodes") or {}).items()}
+    report = verify_mod.run(
+        repo, result, integration=args.integration, probe=args.probe, only=args.only, recorded=recorded
+    )
     if args.json:
         print(json.dumps({
             "ok": report.ok,
             "nodes": report.nodes,
             "issues": [{"check": i.check, "node": i.node, "text": i.text, "fix": i.fix} for i in report.issues],
             "notes": report.notes,
+            "warnings": report.warnings,
             "probe": report.probe,
         }, indent=2))
         return 0 if report.ok else 1
@@ -280,6 +284,8 @@ def cmd_verify(args):
     print(f"Verify {spec.feature}: " + ", ".join(f"{v} {k}" for k, v in sorted(counts.items())))
     for note in report.notes:
         print(f"  ok     {note}")
+    for warning in report.warnings:
+        print(f"  warn   {warning}")
     for issue in report.issues:
         where = f" [{issue.node}]" if issue.node else ""
         print(f"  FAIL   {issue.check}{where}: {issue.text}")
@@ -288,7 +294,10 @@ def cmd_verify(args):
     if not args.integration or not args.probe:
         skipped = [n for n, on in (("--integration", args.integration), ("--probe", args.probe)) if not on]
         print(f"  note   not run: {', '.join(skipped)}")
-    print("Result: " + ("ok" if report.ok else f"{len(report.issues)} issue(s)"))
+    result_text = "ok" if report.ok else f"{len(report.issues)} issue(s)"
+    if report.warnings:
+        result_text += f", {len(report.warnings)} warning(s)"
+    print("Result: " + result_text)
     return 0 if report.ok else 1
 
 

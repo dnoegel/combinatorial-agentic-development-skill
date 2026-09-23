@@ -6,7 +6,10 @@ nodes. Placement keeps every dependency reachable:
 linear  every node sits on the previous node in topological order.
 tree    every node sits on its deepest dependency. When dependencies live on
         different lanes, one lane is grafted onto the other if every moved
-        node keeps its own dependencies. If that is impossible, the node
+        node keeps its own dependencies. Of the possible grafts, the one that
+        stacks the fewest nodes on code they do not need wins. If even the
+        best graft would do that to more than `max_coupling` nodes, the node
+        starts in a later wave instead, so unrelated options stay independent. If that is impossible, the node
         starts from the base branch in a later wave, after its dependencies
         have merged.
 
@@ -16,6 +19,7 @@ that contain started work (branched or MR open) are never moved.
 Placement is deterministic for a given plan.
 """
 
+import itertools
 import re
 import shlex
 from dataclasses import dataclass, field
@@ -82,7 +86,7 @@ def _branches(plan, prefix):
     return names
 
 
-def place(plan, layout="tree", base_branch="main", prefix="", state=None):
+def place(plan, layout="tree", base_branch="main", prefix="", state=None, max_coupling=2):
     state = state or {}
     merged = {n for n, v in state.items() if (v or {}).get("status") == "merged"}
     started = {n for n, v in state.items() if (v or {}).get("status") in ("branched", "mr-open")}
@@ -93,47 +97,113 @@ def place(plan, layout="tree", base_branch="main", prefix="", state=None):
     waits = {}
     grafted = {}
 
-    def chain(x):
+    # reach: everything that builds on a node (it moves along when the node moves).
+    # needs: everything a node builds on. A graft "costs" the nodes that end up
+    # stacked on code they do not need.
+    reach = {n.id: {n.id} for n in plan.nodes}
+    for nid in reversed(plan.order):
+        for other in plan.nodes:
+            if nid in other.depends_on:
+                reach[nid] |= reach[other.id]
+    needs = {nid: set() for nid in plan.order}
+    for nid in plan.order:
+        for d in deps[nid]:
+            needs[nid] |= {d} | needs[d]
+
+    def chain(x, par=None):
+        par = parent if par is None else par
         out = []
         while x is not None:
             out.append(x)
-            x = parent[x]
+            x = par[x]
         return out
 
-    def covered(dep, x):
-        return dep in merged or dep in chain(x) or wave[dep] < wave[x]
+    def subtree(u, par):
+        return [n for n in par if u in chain(n, par)]
 
-    def subtree(u):
-        return [n for n in parent if u in chain(n)]
+    def attempt(nid, order):
+        """Graft the other dependencies' lanes under the first one. Returns (cost, parents, grafts, tip)."""
+        par = dict(parent)
+        grafts = {}
+        cost = 0
+        tip = order[0]
+        for u in order[1:]:
+            tip_chain = chain(tip, par)
+            if u in merged or u in tip_chain or wave[u] < wave[tip]:
+                continue
+            if wave[u] != wave[tip]:
+                return None
+            root = u  # the top of u's lane: the ancestor just below the tip's chain
+            while par[root] is not None and par[root] not in tip_chain:
+                root = par[root]
+            moved = subtree(root, par)
+            if any(m in started for m in moved):
+                return None
+            base_chain = set(tip_chain)
+            for m in moved:
+                path = {x for x in chain(m, par) if x in moved}
+                for dep in deps[m]:
+                    if dep in merged or dep in base_chain or dep in path or wave[dep] < wave[tip]:
+                        continue
+                    return None
+            par[root] = tip
+            grafts[root] = nid
+            coupled = set().union(*(reach[m] for m in moved))
+            cost += sum(1 for x in coupled if tip not in needs[x])
+            tip = u
+        return cost, par, grafts, tip
 
     def try_place(nid, ds):
         ranked = sorted(ds, key=lambda d: (wave[d], d in started, len(chain(d)), rank[d]), reverse=True)
-        tip = ranked[0]
-        for u in ranked[1:]:
-            if covered(u, tip):
-                continue
-            if wave[u] != wave[tip]:
-                return False
-            moved = subtree(u)
-            if any(m in started for m in moved):
-                return False
-            base_chain = set(chain(tip))
-            for s in moved:
-                path = set(x for x in chain(s) if x in moved)
-                for dep in deps[s]:
-                    if dep in merged or dep in base_chain or dep in path or wave[dep] < wave[tip]:
-                        continue
-                    return False
-            parent[u] = tip
-            grafted[u] = nid
-            tip = u
+        orders = list(itertools.permutations(ranked)) if len(ranked) <= 4 else [tuple(ranked)]
+        best = None
+        for order in orders:
+            outcome = attempt(nid, order)
+            if outcome is not None and (best is None or outcome[0] < best[0]):
+                best = outcome
+        if best is None or best[0] > max_coupling:
+            return False
+        _, par, grafts, tip = best
+        parent.clear()
+        parent.update(par)
+        grafted.update(grafts)
         parent[nid] = tip
         wave[nid] = wave[tip]
         return True
 
-    prev = None
+    # Started branches keep the parent they were built on (recorded as `onto`),
+    # as long as that parent still covers their dependencies.
+    names_early = _branches(plan, prefix)
+    by_branch = {b: n for n, b in names_early.items()}
+    pins = {}
     for nid in plan.order:
+        entry = state.get(nid) or {}
+        if nid in started and entry.get("onto"):
+            onto = entry["onto"]
+            if onto == base_branch:
+                pins[nid] = None
+            elif by_branch.get(onto) not in (None, nid):
+                pins[nid] = by_branch[onto]
+    order = _order_with_pins(plan.order, deps, pins, rank)
+
+    def pinned(nid):
+        par = pins[nid]
+        if par is not None and par not in parent:
+            return False
+        ancestors = set(chain(par)) if par is not None else set()
+        base_wave = wave[par] if par is not None else 0
+        for d in deps[nid]:
+            if d in merged or d in ancestors or (d in wave and wave[d] < base_wave):
+                continue
+            return False
+        parent[nid], wave[nid] = par, base_wave
+        return True
+
+    prev = None
+    for nid in order:
         ds = deps[nid]
+        if layout != "linear" and nid in pins and pinned(nid):
+            continue
         if layout == "linear":
             parent[nid], wave[nid] = prev, 0
             prev = nid
@@ -176,6 +246,36 @@ def place(plan, layout="tree", base_branch="main", prefix="", state=None):
         for nid in order
     }
     return Stack(layout=layout, base_branch=base_branch, placements=placements, order=order)
+
+
+def _order_with_pins(order, deps, pins, rank):
+    """Plan order, adjusted so a pinned parent is placed before its child. Pins that would cycle are dropped."""
+    edges = {n: set(deps[n]) for n in order}
+    for child, par in list(pins.items()):
+        if par is None:
+            continue
+        edges[child].add(par)
+        # drop the pin if it creates a cycle
+        seen, stack = set(), [par]
+        while stack:
+            cur = stack.pop()
+            if cur == child:
+                edges[child].discard(par)
+                del pins[child]
+                break
+            if cur not in seen:
+                seen.add(cur)
+                stack.extend(edges.get(cur, ()))
+    remaining = {n: set(e) for n, e in edges.items()}
+    out = []
+    while remaining:
+        ready = sorted((n for n, e in remaining.items() if not e), key=rank.get)
+        pick = ready[0]
+        out.append(pick)
+        del remaining[pick]
+        for e in remaining.values():
+            e.discard(pick)
+    return out
 
 
 def effective_onto(stack, state, node_id):

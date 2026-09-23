@@ -76,6 +76,13 @@ def _as_list(value):
     return [line.strip("- ").strip() for line in str(value).splitlines() if line.strip()]
 
 
+def _lower_first(label):
+    """`My company (Shopware)` becomes `my company (Shopware)`; acronyms such as `PDF` stay."""
+    if label[:1].isupper() and label[1:2].islower():
+        return label[:1].lower() + label[1:]
+    return label
+
+
 def _strip_verb(title):
     for verb in ("Add ", "Implement ", "Create "):
         if title.startswith(verb):
@@ -233,7 +240,7 @@ def build(spec, space, scenarios, followups=None, state=None):
             node = Node(
                 id=f"opt.{d}.{o.id}",
                 kind="option",
-                title=f"{dim.label}: {o.label.lower() if o.label[:1].isupper() and o.label[1:2].islower() else o.label}",
+                title=f"{dim.label}: {_lower_first(o.label)}",
                 purpose=o.summary or f"Implement `{d} = {o.id}` behind the {label} abstraction.",
                 decisions=[f"{d} = {o.id}"],
                 scope=f"One implementation of the {label} interface, registered as `{o.id}`. No changes to other options.",
