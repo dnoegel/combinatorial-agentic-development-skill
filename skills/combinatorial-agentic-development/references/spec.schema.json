@@ -1,0 +1,385 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://combinatorial-agentic-development/spec.schema.json",
+  "title": "Combinatorial Agentic Development spec",
+  "description": "Canonical decision space. Stored in a ```yaml cad-spec block of a planning document, or as a standalone YAML/JSON file.",
+  "type": "object",
+  "required": [
+    "dimensions"
+  ],
+  "properties": {
+    "cad": {
+      "type": "integer",
+      "description": "Spec format version."
+    },
+    "feature": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Slug used for branch names."
+    },
+    "project": {
+      "type": "string",
+      "description": "Alias for feature."
+    },
+    "title": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "dimensions": {
+      "type": "object",
+      "description": "Ordered mapping of decision id to its options.",
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "noop": {
+                      "type": "boolean"
+                    },
+                    "summary": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "description": "Single-key mapping: option id to details."
+                }
+              ]
+            },
+            "minItems": 1
+          },
+          {
+            "type": "object",
+            "required": [
+              "options"
+            ],
+            "properties": {
+              "options": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                            },
+                            "label": {
+                              "type": "string"
+                            },
+                            "noop": {
+                              "type": "boolean"
+                            },
+                            "summary": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "description": "Single-key mapping: option id to details."
+                        }
+                      ]
+                    },
+                    "minItems": 1
+                  },
+                  {
+                    "type": "object",
+                    "description": "Mapping of option id to details (or null)."
+                  }
+                ]
+              },
+              "label": {
+                "type": "string"
+              },
+              "applies_when": {
+                "type": "string",
+                "description": "Constraint expression, e.g. `pdf_delivery == email and email_capture != disabled`."
+              },
+              "bundle": {
+                "type": "boolean"
+              },
+              "summary": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "constraints": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "string",
+            "description": "Shorthand for `never: <expr>`."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "if": {
+                "type": "string",
+                "description": "Constraint expression, e.g. `pdf_delivery == email and email_capture != disabled`."
+              },
+              "requires": {
+                "type": "string",
+                "description": "Constraint expression, e.g. `pdf_delivery == email and email_capture != disabled`."
+              },
+              "excludes": {
+                "type": "string",
+                "description": "Constraint expression, e.g. `pdf_delivery == email and email_capture != disabled`."
+              },
+              "never": {
+                "type": "string",
+                "description": "Constraint expression, e.g. `pdf_delivery == email and email_capture != disabled`."
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "interactions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "when"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+          },
+          "when": {
+            "type": "string",
+            "description": "Constraint expression, e.g. `pdf_delivery == email and email_capture != disabled`."
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "generation": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": [
+            "exhaustive",
+            "pairwise",
+            "twise",
+            "selected"
+          ]
+        },
+        "strength": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "variants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "Dimension id to option id."
+          }
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "properties": {
+        "max_valid_variants": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_implementation_nodes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "require_confirmation_above": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_enumeration": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "stack": {
+      "type": "object",
+      "properties": {
+        "base_branch": {
+          "type": "string"
+        },
+        "branch_prefix": {
+          "type": "string"
+        },
+        "layout": {
+          "enum": [
+            "tree",
+            "linear"
+          ]
+        },
+        "platform": {
+          "enum": [
+            "auto",
+            "gitlab",
+            "github",
+            "none"
+          ]
+        }
+      }
+    },
+    "plan": {
+      "type": "object",
+      "description": "Node id (base, dim.<d>, opt.<d>.<o>, ix.<id>) to repository-specific details.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "components": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "files": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "guidance": {
+            "type": "string"
+          },
+          "tests": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "acceptance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "risk": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "complexity": {
+            "enum": [
+              "S",
+              "M",
+              "L"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "verify": {
+      "type": "object",
+      "description": "Commands used by `cad.py verify`.",
+      "properties": {
+        "test": {
+          "type": "string",
+          "description": "Test command, run with all branches merged."
+        },
+        "probe": {
+          "type": "string",
+          "description": "Receives a variant as JSON (stdin and CAD_VARIANT) and prints the options it observes as dimension=option tokens."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,417 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://combinatorial-agentic-development/analysis.schema.json",
+  "title": "Combinatorial Agentic Development analysis",
+  "description": "Output of `cad.py analyze --json`. Sections after `findings` are missing when an earlier stage failed.",
+  "type": "object",
+  "required": [
+    "tool",
+    "version",
+    "feature",
+    "title",
+    "status",
+    "mode",
+    "confirmations",
+    "suggestions",
+    "findings"
+  ],
+  "properties": {
+    "tool": {
+      "const": "combinatorial-agentic-development"
+    },
+    "version": {
+      "type": "string"
+    },
+    "feature": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "needs-confirmation",
+        "error"
+      ]
+    },
+    "mode": {
+      "enum": [
+        "exhaustive",
+        "pairwise",
+        "twise",
+        "selected"
+      ]
+    },
+    "strength": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "confirmations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "suggestions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "level",
+          "text"
+        ],
+        "properties": {
+          "level": {
+            "enum": [
+              "error",
+              "warning",
+              "info"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "required": [
+        "theoretical",
+        "collapsed",
+        "invalid",
+        "valid"
+      ],
+      "properties": {
+        "theoretical": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "collapsed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "invalid": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "valid": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "scenarios": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "configurable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nodes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "dimensions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "applies_when",
+          "options"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "applies_when": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "label",
+                "noop",
+                "dead"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "noop": {
+                  "type": "boolean"
+                },
+                "dead": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "constraints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "rule",
+          "removes",
+          "removes_only",
+          "finding"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "rule": {
+            "type": "string"
+          },
+          "removes": {
+            "type": "integer"
+          },
+          "removes_only": {
+            "type": "integer"
+          },
+          "finding": {
+            "enum": [
+              "never fires",
+              "redundant",
+              null
+            ]
+          }
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "required": [
+        "strength",
+        "possible",
+        "reachable",
+        "covered"
+      ],
+      "properties": {
+        "strength": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "possible": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reachable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "covered": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "variant"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^T[0-9]{2,}$"
+          },
+          "variant": {
+            "type": "object",
+            "description": "Dimension id to option id, or null where the decision does not apply."
+          }
+        }
+      }
+    },
+    "stack": {
+      "type": "object",
+      "required": [
+        "layout",
+        "base_branch",
+        "lanes",
+        "waves"
+      ],
+      "properties": {
+        "layout": {
+          "enum": [
+            "tree",
+            "linear"
+          ]
+        },
+        "base_branch": {
+          "type": "string"
+        },
+        "lanes": {
+          "type": "integer"
+        },
+        "waves": {
+          "type": "integer"
+        }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "purpose",
+          "decisions",
+          "scope",
+          "depends_on",
+          "components",
+          "files",
+          "guidance",
+          "tests",
+          "scenarios",
+          "acceptance",
+          "risk",
+          "complexity",
+          "branch",
+          "onto",
+          "wave",
+          "mr_title",
+          "mr_description",
+          "needs_enrichment"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "base",
+              "dimension",
+              "option",
+              "interaction"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "decisions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scope": {
+            "type": "string"
+          },
+          "depends_on": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "guidance": {
+            "type": "string"
+          },
+          "tests": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scenarios": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "acceptance": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "risk": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "complexity": {
+            "enum": [
+              "S",
+              "M",
+              "L"
+            ]
+          },
+          "branch": {
+            "type": "string"
+          },
+          "onto": {
+            "type": "string"
+          },
+          "wave": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "mr_title": {
+            "type": "string"
+          },
+          "mr_description": {
+            "type": "string"
+          },
+          "needs_enrichment": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}
