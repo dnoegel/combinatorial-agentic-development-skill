@@ -1,0 +1,7 @@
+interface:
+  display_name: "Combinatorial Agentic Development"
+  short_description: "Plan every product variant, build it as stacked MRs"
+  default_prompt: "Use $combinatorial-agentic-development to plan this feature's decision space and its MR stack."
+
+policy:
+  allow_implicit_invocation: true
