@@ -1,0 +1,47 @@
+# Revision 2 of the lead-capture example: emails can be HTML or plain text,
+# and sending the PDF after capture needs a little glue code.
+project: lead-capture-flow
+
+dimensions:
+  channel:
+    - website
+    - landing_page
+    - checkout
+
+  pdf_delivery:
+    - email
+    - download
+    - none
+
+  email_capture:
+    - before_test
+    - after_test
+    - disabled
+
+  crm_sync:
+    - hubspot
+    - none
+
+  email_format:
+    options: [html, text]
+    applies_when: pdf_delivery == email
+
+constraints:
+  - if: pdf_delivery == email
+    requires: email_capture != disabled
+
+  - if: channel == checkout
+    excludes: email_capture == before_test
+
+interactions:
+  - id: pdf-after-capture
+    when: pdf_delivery == email and email_capture == after_test
+    title: Send the PDF once the address is captured
+
+generation:
+  mode: exhaustive
+
+limits:
+  max_valid_variants: 20
+  max_implementation_nodes: 12
+  require_confirmation_above: 8

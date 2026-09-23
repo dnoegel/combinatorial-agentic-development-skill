@@ -1,0 +1,23 @@
+{
+  "skill_name": "combinatorial-agentic-development",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I want a personal homepage. Style should be serious, private or funny. It can be static or dynamic. Maybe a guestbook where people can comment, and maybe an imprint, not sure yet. The start page is either about me, about my company, or news in agentic commerce. Plan it in a fresh git repo in ./homepage, TypeScript on Node, no dependencies. Don't push anything.",
+      "expected_output": "A readback with real counts from cad.py analyze (72 theoretical combinations before constraints), proposed constraints named explicitly (for example guestbook requires dynamic rendering), questions with defaults, then a planning document with decision tree, MR stack and test matrix. No branches before sign-off.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Here is our plan for the lead capture flow (examples/lead-capture-flow-r2.md). Marketing now also wants SMS delivery of the PDF, but only in checkout. What changes, and which open MRs are affected?",
+      "expected_output": "A proposed spec change (new option sms on pdf_delivery plus a constraint limiting it to checkout), impact from cad.py analyze and cad.py impact, the effect on started and merged nodes (follow-up for merged base), and no regeneration before confirmation.",
+      "files": ["examples/lead-capture-flow-r2.md"]
+    },
+    {
+      "id": 3,
+      "prompt": "onboarding flow: signup via email or google or apple, plan free or pro, pro needs a card, free must not have a card, and every signup via apple is pro. oh and free users get onboarding emails. build the variants please",
+      "expected_output": "Counts from the tool, a finding that apple + free is impossible, a clear statement of which options are dead or forced if any, a readback of the constraints in spec form, and a question before writing the plan.",
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+feature: contradictory
+dimensions:
+  plan: [free, pro]
+  billing: [card, invoice]
+constraints:
+  - if: plan == free
+    requires: billing == card
+  - if: plan == free
+    excludes: billing == card
+  - if: plan == pro
+    requires: billing == invoice
+  - if: plan == pro
+    excludes: billing == invoice

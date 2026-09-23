@@ -1,0 +1,16 @@
+# A spec with every kind of smell the tool can detect.
+feature: findings
+dimensions:
+  channel: [web, app, kiosk]
+  login: [password, sso, none]
+  theme: [light]
+constraints:
+  - id: no-kiosk
+    never: channel == kiosk
+    reason: Kiosks are out of scope this year.
+  - if: channel == kiosk
+    requires: login == none
+  - if: login == sso
+    excludes: login == password
+  - if: channel == app
+    excludes: login == none
