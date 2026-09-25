@@ -1,6 +1,6 @@
 # Revision 2 of the lead-capture example: emails can be HTML or plain text,
 # and sending the PDF after capture needs a little glue code.
-project: lead-capture-flow
+feature: lead-capture-flow
 
 dimensions:
   channel:

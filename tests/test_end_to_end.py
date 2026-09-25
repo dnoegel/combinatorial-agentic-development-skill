@@ -159,16 +159,11 @@ class CliTest(unittest.TestCase):
         self.assertIn("Status  needs confirmation", out)
         self.assertIn("Product decisions made on your behalf: 0", out)
 
-    def test_analyze_json(self):
-        for name in ("lead-capture-flow.yaml", "lead-capture-flow-html-email.yaml", "findings.yaml", "contradictory.yaml"):
-            data = json.loads(cad("analyze", support.fixture(name), "--json").stdout)
-            self.assertEqual(data["tool"], "combinatorial-agentic-development", name)
-        data = json.loads(cad("analyze", support.fixture("lead-capture-flow.yaml"), "--json").stdout)
-        self.assertEqual(data["counts"], {
-            "theoretical": 54, "collapsed": 0, "invalid": 12, "valid": 42,
-            "scenarios": 42, "configurable": 42, "nodes": 13,
-        })
-        self.assertEqual(len(data["nodes"][0]["mr_description"].splitlines()) > 3, True)
+    def test_analyze_lists_variants(self):
+        proc = cad("analyze", support.fixture("lead-capture-flow.yaml"), "--variants")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("T42  channel=checkout", proc.stdout)
+        self.assertNotIn("T43", proc.stdout)
 
     def test_fixtures_match_spec_schema(self):
         schema = load_schema("spec.schema.json")
@@ -223,6 +218,7 @@ class ExamplesTest(unittest.TestCase):
     def test_examples_are_up_to_date(self):
         with tempfile.TemporaryDirectory() as tmp:
             files = examples_builder.build(tmp)
+        self.assertEqual(sorted(files), ["examples/lead-capture-flow.md"])
         stale = []
         for name, text in files.items():
             path = os.path.join(support.ROOT, name)

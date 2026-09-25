@@ -1,5 +1,6 @@
 {
   "name": "combinatorial-agentic-development",
+  "description": "Combinatorial Agentic Development: plan every valid product variant from a decision space and build it as a stack of small merge requests.",
   "owner": {
     "name": "Daniel Nögel"
   },

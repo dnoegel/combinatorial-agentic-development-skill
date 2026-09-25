@@ -11,7 +11,7 @@ def base(**extra):
 
 
 class LoadTest(unittest.TestCase):
-    def test_primary_fixture_loads_with_project_alias(self):
+    def test_primary_fixture_loads(self):
         spec = load(load_fixture("lead-capture-flow.yaml"))
         self.assertEqual(spec.feature, "lead-capture-flow")
         self.assertEqual(spec.title, "Lead capture flow")
@@ -31,7 +31,7 @@ class LoadTest(unittest.TestCase):
 
     def test_long_form_dimension(self):
         raw = base()
-        raw["dimensions"]["c"] = {"label": "Colour", "options": {"red": {"label": "Red!"}, "blue": None}, "bundle": True}
+        raw["dimensions"]["c"] = {"label": "Colour", "options": [{"id": "red", "label": "Red!"}, "blue"], "bundle": True}
         spec = load(raw)
         dim = spec.dimensions["c"]
         self.assertEqual(dim.label, "Colour")
@@ -44,9 +44,8 @@ class LoadTest(unittest.TestCase):
             {"if": "a == x", "requires": "b == p"},
             {"if": "a == y", "excludes": "b == p"},
             {"never": "a == x and b == none", "id": "X1", "reason": "because"},
-            "a == y and b == none",
         ]))
-        self.assertEqual([c.kind for c in spec.constraints], ["requires", "excludes", "never", "never"])
+        self.assertEqual([c.kind for c in spec.constraints], ["requires", "excludes", "never"])
         self.assertEqual(spec.constraints[2].id, "X1")
         self.assertEqual(spec.constraints[2].reason, "because")
         self.assertEqual(spec.constraints[0].text, "if a == x requires b == p")

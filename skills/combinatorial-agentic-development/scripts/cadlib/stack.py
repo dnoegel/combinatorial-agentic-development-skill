@@ -165,8 +165,8 @@ def place(plan, layout="tree", base_branch="main", prefix="", state=None, max_co
 
     # Started branches keep the parent they were built on (recorded as `onto`),
     # as long as that parent still covers their dependencies.
-    names_early = _branches(plan, prefix)
-    by_branch = {b: n for n, b in names_early.items()}
+    names = _branches(plan, prefix)
+    by_branch = {b: n for n, b in names.items()}
     pins = {}
     for nid in plan.order:
         entry = state.get(nid) or {}
@@ -224,7 +224,6 @@ def place(plan, layout="tree", base_branch="main", prefix="", state=None, max_co
         order.append(pick)
         remaining.remove(pick)
 
-    names = _branches(plan, prefix)
     placements = {
         nid: Placement(
             node=nid,

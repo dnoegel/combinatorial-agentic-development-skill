@@ -15,11 +15,11 @@ MODE_TEXT = {
 HONESTY = {
     "exhaustive": "The test matrix contains every valid variant.",
     "pairwise": (
-        "Pairwise coverage tests every pair of decisions, not every product. "
+        "Pairwise coverage tests every pair of decisions. "
         "{untested} of {valid} valid variants are configurable but have no dedicated scenario."
     ),
     "twise": (
-        "{t}-wise coverage tests every combination of {t} decisions, not every product. "
+        "{t}-wise coverage tests every combination of {t} decisions. "
         "{untested} of {valid} valid variants are configurable but have no dedicated scenario."
     ),
     "selected": (
@@ -176,7 +176,7 @@ def mr_description(spec, node, stack, plan, doc_path=None):
     lines += ["", "## Verification", "- Not run yet."]
     if node.scenarios:
         lines.append(f"- Scenarios to cover: {_scenario_list(node.scenarios)}.")
-    lines += ["", "## Risks", f"- {node.risk.capitalize()}: {RISK_TEXT[node.kind]}"]
+    lines += ["", "## Risks", f"- {node.risk.capitalize() + ': ' if node.risk else ''}{RISK_TEXT[node.kind]}"]
     return "\n".join(lines)
 
 
@@ -275,7 +275,7 @@ def _variant_cell(value):
     return "n/a" if value is None else f"`{value}`"
 
 
-def _node_block(spec, result, node, number, doc_path):
+def _node_block(result, node, number):
     stack, plan = result.stack, result.plan
     p = stack.placements[node.id]
     onto = f"`{p.parent_branch}`" + (f" (wave {p.wave + 1})" if p.wave else "")
@@ -292,11 +292,11 @@ def _node_block(spec, result, node, number, doc_path):
     if why:
         rows.append(("Why", "; ".join(why)))
     rows += [
-        ("Components", ", ".join(node.components) if node.components else PLACEHOLDER),
-        ("Expected files", ", ".join(f"`{f}`" for f in node.files) if node.files else PLACEHOLDER),
-        ("Risk / complexity", f"{node.risk} / {node.complexity}"),
+        ("Components and files", ", ".join(node.components + [f"`{f}`" for f in node.files]) or PLACEHOLDER),
         ("Branch", f"`{p.branch}` onto {onto}"),
     ]
+    if node.risk or node.complexity:
+        rows.insert(-1, ("Risk / complexity", " / ".join(x for x in (node.risk, node.complexity) if x)))
     lines = [
         f"<details><summary><b>{number}. {node.title}</b> <code>{node.id}</code></summary>",
         "",
@@ -306,7 +306,9 @@ def _node_block(spec, result, node, number, doc_path):
         "|---|---|",
     ]
     lines += [f"| {k} | {str(v).replace('|', '/')} |" for k, v in rows]
-    lines += ["", f"**Guidance.** {node.guidance or GUIDANCE[node.kind]}", ""]
+    lines.append("")
+    if node.guidance:
+        lines += [f"**Guidance.** {node.guidance}", ""]
     if node.notes:
         lines += [f"**Notes.** {node.notes}", ""]
     if node.changes:
@@ -315,15 +317,11 @@ def _node_block(spec, result, node, number, doc_path):
     if node.scenarios:
         lines.append(f"- Scenarios: {_scenario_list(node.scenarios)}")
     lines += ["", "**Acceptance criteria**"] + [f"- [ ] {a}" for a in node.acceptance]
-    lines += [
-        "", "**MR description**", "",
-        _fence("markdown", mr_description(spec, node, stack, plan, doc_path)),
-        "", "</details>", "",
-    ]
+    lines += ["", "</details>", ""]
     return lines
 
 
-def generated_markdown(result, doc_path=None):
+def generated_markdown(result):
     spec, space, sc, plan, stack = result.spec, result.space, result.scenarios, result.plan, result.stack
     dims = space.dims
     L = []
@@ -416,9 +414,14 @@ def generated_markdown(result, doc_path=None):
     )
     L.append("")
 
-    L += ["### Nodes", ""]
+    L += ["### Nodes", "", "Default guidance, unless a node says otherwise:", ""]
+    for kind, label in (("base", "Foundation"), ("dimension", "Abstractions"), ("option", "Options"),
+                        ("interaction", "Interactions"), ("followup", "Follow-ups")):
+        if kind in kinds:
+            L.append(f"- **{label}:** {GUIDANCE[kind]}")
+    L.append("")
     for n, nid in enumerate(stack.order, 1):
-        L += _node_block(spec, result, plan.by_id[nid], n, doc_path)
+        L += _node_block(result, plan.by_id[nid], n)
 
     L += ["## Test matrix", ""]
     mode = spec.mode

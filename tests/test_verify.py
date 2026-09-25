@@ -1,15 +1,17 @@
 """verify, brief, remote detection and the progress guard, against real git repositories."""
 
+import contextlib
+import io
 import json
 import os
+import shutil
 import subprocess
-import sys
 import tempfile
-import textwrap
+import types
 import unittest
 
-import support
-from cadlib import document
+import support  # noqa: F401  (puts cadlib on the path)
+from cadlib import cli, document
 
 SPEC = """\
 feature: shop
@@ -39,10 +41,21 @@ print(" ".join(seen))
 
 
 def cad(*args, cwd):
-    return subprocess.run(
-        [sys.executable, support.CAD, *args], capture_output=True, text=True, cwd=cwd,
-        env=dict(os.environ, CAD_DATE="2026-09-23"), check=False,
-    )
+    """Run the CLI in-process (fast); test_end_to_end covers the real entry point."""
+    out, err = io.StringIO(), io.StringIO()
+    old_cwd, old_date = os.getcwd(), os.environ.get("CAD_DATE")
+    os.chdir(cwd)
+    os.environ["CAD_DATE"] = "2026-09-23"
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = cli.main(list(args))
+    finally:
+        os.chdir(old_cwd)
+        if old_date is None:
+            os.environ.pop("CAD_DATE", None)
+        else:
+            os.environ["CAD_DATE"] = old_date
+    return types.SimpleNamespace(returncode=code, stdout=out.getvalue(), stderr=err.getvalue())
 
 
 def git(cwd, *args):
@@ -50,20 +63,44 @@ def git(cwd, *args):
 
 
 class GitRepoCase(unittest.TestCase):
+    """A repository with the approved plan, probe and checks committed on main.
+
+    Built once per class and copied for every test, because creating repos is
+    the slowest part of these tests.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls._template = tempfile.TemporaryDirectory()
+        repo = os.path.join(cls._template.name, "repo")
+        os.makedirs(repo)
+        git(repo, "init", "-q", "-b", "main")
+        git(repo, "config", "user.email", "test@example.com")
+        git(repo, "config", "user.name", "Test")
+        git(repo, "config", "commit.gpgsign", "false")
+        doc = os.path.join(repo, "docs", "variants", "shop.md")
+        os.environ["CAD_DATE"] = "2026-09-23"
+        try:
+            document.create(doc, "shop", spec_text=SPEC)
+            document.render(doc)
+        finally:
+            os.environ.pop("CAD_DATE", None)
+        for name, text in (("probe.py", PROBE), ("check.py", "print('ok')\n")):
+            with open(os.path.join(repo, name), "w", encoding="utf-8") as fh:
+                fh.write(text)
+        git(repo, "add", "-A")
+        git(repo, "commit", "-qm", "Add plan")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._template.cleanup()
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.repo = self.tmp.name
-        git(self.repo, "init", "-q", "-b", "main")
-        git(self.repo, "config", "user.email", "test@example.com")
-        git(self.repo, "config", "user.name", "Test")
+        self.repo = os.path.join(self.tmp.name, "repo")
+        shutil.copytree(os.path.join(self._template.name, "repo"), self.repo, symlinks=True)
         self.doc = os.path.join(self.repo, "docs", "variants", "shop.md")
         os.environ["CAD_DATE"] = "2026-09-23"
-        document.create(self.doc, "shop", spec_text=SPEC)
-        document.render(self.doc)
-        self.write("probe.py", PROBE)
-        self.write("check.py", "print('ok')\n")
-        git(self.repo, "add", "-A")
-        git(self.repo, "commit", "-qm", "Add plan")
 
     def tearDown(self):
         os.environ.pop("CAD_DATE", None)
@@ -186,7 +223,9 @@ class BriefAndStackTest(GitRepoCase):
 
     def test_brief_for_option_has_probe_and_commit_subject(self):
         proc = cad("brief", self.doc, "opt.theme.dark", cwd=self.repo)
-        self.assertIn("The probe observes `theme=dark` in exactly the scenarios that select it", proc.stdout)
+        self.assertIn("the probe observes `theme=dark` in exactly those", proc.stdout)
+        self.assertIn("Part of the Shop plan (docs/variants/shop.md)", proc.stdout)
+        self.assertIn("## MR description", proc.stdout)
         self.assertIn("Subject: `Add dark theme`", proc.stdout)
 
     def test_stack_without_remote_uses_local_base(self):
@@ -223,6 +262,26 @@ class PlanFindingsTest(unittest.TestCase):
         self.assertEqual(len(texts), 1)
         self.assertIn("`opt.channel.website` and `opt.crm_sync.hubspot`", texts[0])
         self.assertIn("`src/site.ts`", texts[0])
+
+
+class HygieneTest(GitRepoCase):
+    def test_warning_for_stray_worktree(self):
+        self.build_stack()
+        extra = os.path.join(self.tmp.name + "-preview")
+        git(self.repo, "worktree", "add", "-q", "--detach", extra, "shop/theme")
+        try:
+            code, data = self.verify()
+            self.assertEqual(code, 0, data)  # warnings never fail verify
+            text = "\n".join(data["warnings"])
+            self.assertIn("extra worktree", text)
+            self.assertIn("git worktree remove --force", text)
+        finally:
+            subprocess.run(["git", "worktree", "remove", "--force", extra], cwd=self.repo, capture_output=True)
+
+    def test_brief_mentions_noop_ownership_and_commit_accuracy(self):
+        out = cad("brief", self.doc, "dim.sync", cwd=self.repo).stdout
+        self.assertIn("Also owns the no-op option(s) `none`", out)
+        self.assertIn("Describe only changes that are in the commit.", out)
 
 
 if __name__ == "__main__":

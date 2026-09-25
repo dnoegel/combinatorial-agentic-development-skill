@@ -44,7 +44,7 @@ Contract snapshots of started nodes live in an HTML comment at the very end of t
 3. **Dimensions**: options with no-op, dead and not-targeted markers, plus `applies_when`.
 4. **Constraints**: each rule with how many combinations it removes, how many only it removes, and findings.
 5. **Findings**: tool findings (errors, warnings, info).
-6. **Implementation plan**: node counts, the MR stack diagram, the stack table (merge order), and one collapsible block per node with decisions, scope, dependencies and why they exist, components, expected files, risk and complexity, branch and target, guidance, tests, scenarios, acceptance criteria, and a ready-to-use MR description.
+6. **Implementation plan**: node counts, the MR stack diagram, the stack table (merge order), and one collapsible block per node with decisions, scope, dependencies and why they exist, components and files, branch and target, tests, scenarios, and acceptance criteria. MR descriptions come from `cad.py brief`.
 7. **Test matrix**: mode, an explicit statement of what the matrix does and does not cover, coverage numbers for pairwise and t-wise, and the scenario table (folded when long).
 
 ## Mermaid conventions

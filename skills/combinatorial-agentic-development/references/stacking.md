@@ -10,10 +10,10 @@ Each plan node depends on other nodes:
 
 Redundant edges are removed (transitive reduction). A git branch has one parent, so placement turns this graph into a tree:
 
-- **tree** (default): each node sits on its deepest dependency. If dependencies live on different lanes, the shallower lane is grafted onto the deeper one when every moved node keeps its own dependencies, and the node's "Why" row says so. If grafting is impossible, the node starts from the base branch in a later **wave**, after its dependencies merged.
+- **tree** (default): each node sits on its deepest dependency. If its dependencies live on different lanes, one lane is grafted under the other, and the node's "Why" row says so. Of the possible grafts, the tool picks the one that stacks the fewest nodes on code they do not need. If that is more than `stack.max_coupling` nodes (default 2), or no graft keeps every moved node's dependencies, the node starts from the base branch in a later **wave**, after its dependencies merged.
 - **linear**: every node sits on the previous one in dependency order. Simple to review, slow to merge.
 
-Placement respects progress. Merged nodes count as part of the base branch. Lanes that contain branched or open work are never moved; the tool prefers a later wave.
+Placement respects progress. Merged nodes count as part of the base branch. A branch that already exists keeps the parent it was built on (recorded as `onto` in the front matter) as long as that parent still covers its dependencies, and lanes with started work are never grafted elsewhere.
 
 Merge order is the order of the stack table. Parents always come first.
 
@@ -42,4 +42,4 @@ git update-ref refs/cad/base/<branch> <parent>
 
 ## GitHub and GitLab
 
-The tool never talks to a remote. Everything needed to open the stack is in the document: branch and target per node, merge order, and a ready MR description per node. `glab mr create --target-branch <onto>` or `gh pr create --base <onto>` is all a stack needs. Stacking tools such as git-spice, Graphite, git-town or `glab stack` can take over restacking and retargeting if a team already uses them.
+The tool never talks to a remote. Everything needed to open the stack is available: branch, target and merge order in the document, and a ready MR description per node from `cad.py brief`. `glab mr create --target-branch <onto>` or `gh pr create --base <onto>` is all a stack needs. Stacking tools such as git-spice, Graphite, git-town or `glab stack` can take over restacking and retargeting if a team already uses them.

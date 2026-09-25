@@ -11,7 +11,7 @@ Why choose a product path when you can implement the whole decision space?
 
 The engineer describes a feature and its open decisions. You keep one planning document per feature. It shows every option, the valid variants, a reduced decision tree, a plan of shared foundations plus per-option work, a test matrix, and a stack of dependent MRs. Planning ends with the engineer's go; only then do branches appear.
 
-The tool computes. You judge. Never count variants, check constraints, or pick stack parents in your head: the script does that deterministically, and a planning document with wrong numbers is worse than none.
+Leave counting, constraint checks and stack placement to the script; it is deterministic and you are not. Your part is judgment: turning conversation into spec changes, spotting combinations that are valid but pointless, and reading the repository.
 
 ## Setup
 
@@ -93,7 +93,7 @@ For each node in stack order:
 
 1. Take the brief. It holds the branch command, scope, owned files, files not to touch, acceptance criteria and the commit format.
 2. Create the branch, implement exactly that scope, run the tests, commit.
-3. Never add commits to a branch that already has children. If you must, `verify` shows the cascade and `restack` fixes it.
+3. Avoid adding commits to a branch that already has children. When it is unavoidable, `verify` shows the cascade and `restack` fixes it.
 
 After every lane, and always before calling the work done:
 
@@ -107,7 +107,7 @@ $CAD verify docs/variants/<feature>.md --integration --probe
 
 **Progress** lives in git: a branch that exists is started, a branch contained in the base branch is merged. Nothing needs to be recorded by hand.
 
-**Remote operations.** Local branches and commits are fine after the go. Pushing, opening MRs and force-pushing a restack are outward-facing: do them only when the engineer asks. Each node's MR description is ready in the planning document.
+**Remote operations.** Local branches and commits are fine after the go. Pushing, opening MRs and force-pushing a restack are outward-facing: do them only when the engineer asks. `cad.py brief <doc> <node>` prints a ready MR description for each node.
 
 ## Changes in flight
 
@@ -127,7 +127,7 @@ Plans are built per option. Keep the code shaped the same way:
 - **Option (`opt.*`):** one implementation plus its registration, and a marker the probe can observe. If the interface must change, that belongs in the abstraction node.
 - **Interaction (`ix.*`):** glue where options meet, kept at the composition root so each option still works alone.
 
-Prefer configuration, strategies and feature flags over copied flows. Copying a flow per variant is the failure this skill exists to prevent.
+Prefer configuration, strategies and feature flags over copying a flow per variant.
 
 ## Generation modes
 
@@ -144,20 +144,15 @@ Never describe pairwise or t-wise results as covering every product. The documen
 
 ## Guardrails
 
-- Show theoretical, removed and valid counts before proposing work. They come from `analyze`, never from mental math.
-- When a limit is exceeded, present the options the tool prints and wait. Raising a limit is the engineer's call.
-- Enumeration above `max_enumeration` is refused. Suggest splitting the feature or using `applies_when`.
-- Contradictory constraints, dead options, constraints that never fire and redundant constraints are reported by the tool. Explain them in plain words and suggest a fix.
-- No branches before the engineer's go. No remote operations without an explicit request.
-- Nothing is done until `verify --integration --probe` passes.
+- When a limit is exceeded or the tool reports a finding (contradiction, dead option, constraint that never fires), explain it in plain words, show the options, and wait. Raising a limit is the engineer's call.
+- `verify` runs the `test` and `probe` commands from the spec. Review spec changes from other people before running it.
 - Branch names, commits and MR text describe the work. Never mention the agent, AI assistance or tooling authorship.
-- Keep the premise light in conversation if the engineer enjoys it, and keep the document factual.
 
 ## Command reference
 
 | Command | Purpose |
 |---|---|
-| `analyze <spec or doc> [--json] [--variants]` | Count, validate and plan without writing anything |
+| `analyze <spec or doc> [--variants]` | Count, validate and plan without writing anything |
 | `new <doc> --spec <file> [--intent TEXT]` | Create a planning document |
 | `render <doc> [--note TEXT]` | Regenerate the plan, append changelog, report restacks and follow-ups |
 | `stack <doc> [--json]` | Dry-run git steps in stack order, with progress read from git |

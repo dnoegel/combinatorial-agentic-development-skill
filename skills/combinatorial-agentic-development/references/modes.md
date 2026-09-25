@@ -16,7 +16,7 @@ Two questions are easy to mix up:
 | `twise` | small set covering every reachable t-tuple | every option | every combination of t decisions is exercised | grows quickly with t | risky interactions between three or more decisions |
 | `selected` | the listed variants | options used by them | each listed product has a scenario | as many as you list | only some variants will ship |
 
-Numbers for the lead-capture example (42 valid variants): exhaustive 42 scenarios, pairwise 10, 3-wise 22 (run `cad.py analyze --json` for the current values).
+Numbers for the lead-capture example (42 valid variants): exhaustive 42 scenarios, pairwise 10, 3-wise 22 (run `cad.py analyze` for the current values).
 
 ## What pairwise and t-wise do not promise
 
@@ -26,13 +26,13 @@ Pairwise coverage exercises every pair of decisions. A defect that needs three s
 - how many of those have no dedicated scenario,
 - how many t-tuples are reachable, covered, and impossible under the constraints.
 
-When you summarize a pairwise plan, repeat the untested count. "Implemented and pairwise tested" is accurate. "All 42 variants tested" is not.
+When you summarize a pairwise plan, repeat the untested count, for example "all 42 variants are configurable, 10 have a dedicated scenario".
 
 ## Algorithm
 
-Pairwise and t-wise use a deterministic lazy greedy set cover over the enumerated valid variants (the AETG family of strategies). Candidates are valid variants only, so constraints are handled exactly and no scenario violates one. Ties go to the earlier variant in enumeration order, so the matrix is stable across runs. The result is small but not guaranteed minimal; for planning that is the right trade.
+Pairwise and t-wise use a deterministic greedy set cover over the enumerated valid variants: each step picks the variant that covers the most uncovered tuples. Candidates are valid variants only, so constraints are handled exactly and no scenario violates one. Ties go to the earlier variant in enumeration order, so the matrix is stable across runs. The result is small but not guaranteed to be minimal.
 
-Established tools such as Microsoft PICT and NIST ACTS produce smaller arrays for very large spaces and have richer constraint languages. They are the natural backend once spaces are too large to enumerate; see the roadmap in the README.
+Established tools such as Microsoft PICT and NIST ACTS produce smaller arrays for very large spaces and have richer constraint languages. They would be the natural backend for spaces too large to enumerate.
 
 ## Choosing a mode
 

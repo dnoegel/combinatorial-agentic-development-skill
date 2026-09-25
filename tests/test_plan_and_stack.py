@@ -2,8 +2,33 @@
 
 import unittest
 
+import support
 from support import load_fixture, run_fixture, run_raw
 from cadlib.stack import branch_slug, steps
+
+HOMEPAGE = {
+    "feature": "homepage",
+    "dimensions": {
+        "style": ["serious", "funny"],
+        "imprint": ["enabled", "none"],
+        "start_page": {"options": [
+            {"id": "about_me", "label": "About me"},
+            {"id": "company", "label": "My company (Shopware)"},
+            {"id": "news", "label": "News"},
+        ]},
+    },
+    "constraints": [{"if": "start_page == company", "requires": "imprint == enabled"}],
+}
+
+
+def chain(stack, nid):
+    out = []
+    cur = stack.placements[nid].parent
+    while cur is not None:
+        out.append(cur)
+        cur = stack.placements[cur].parent
+    return out
+
 
 REQUIRED_FIELDS = (
     "id", "title", "purpose", "decisions", "scope", "depends_on", "components", "files",
@@ -51,8 +76,7 @@ class NodesTest(unittest.TestCase):
             for field in REQUIRED_FIELDS:
                 self.assertTrue(hasattr(node, field), f"{node.id} lacks {field}")
             self.assertTrue(node.title and node.purpose and node.scope and node.tests and node.acceptance)
-            self.assertIn(node.risk, ("low", "medium", "high"))
-            self.assertIn(node.complexity, ("S", "M", "L"))
+            self.assertEqual((node.risk, node.complexity), ("", ""))  # only set through enrichment
 
     def test_scenarios_per_option(self):
         email = self.plan.by_id["opt.pdf_delivery.email"]
@@ -73,7 +97,6 @@ class ConditionalAndInteractionTest(unittest.TestCase):
     def test_interaction_depends_on_both_options(self):
         node = self.plan.by_id["ix.pdf-after-capture"]
         self.assertEqual(sorted(node.depends_on), ["opt.email_capture.after_test", "opt.pdf_delivery.email"])
-        self.assertEqual(node.risk, "high")
 
 
 class BundleAndEnrichmentTest(unittest.TestCase):
@@ -89,7 +112,8 @@ class BundleAndEnrichmentTest(unittest.TestCase):
     def test_plan_enrichment_is_applied(self):
         raw = load_fixture("lead-capture-flow.yaml")
         raw["plan"] = {
-            "base": {"title": "Add lead-capture domain model", "files": ["src/leads/model.ts"], "components": "leads"},
+            "base": {"title": "Add lead-capture domain model", "files": ["src/leads/model.ts"], "components": "leads",
+                     "risk": "high"},
             "opt.nope": {"title": "x"},
         }
         result = run_raw(raw)
@@ -97,6 +121,7 @@ class BundleAndEnrichmentTest(unittest.TestCase):
         self.assertEqual(base.title, "Add lead-capture domain model")
         self.assertEqual(base.files, ["src/leads/model.ts"])
         self.assertEqual(base.components, ["leads"])
+        self.assertEqual(base.risk, "high")
         self.assertTrue(any("plan.opt.nope" in f.text for f in result.findings))
 
 
@@ -197,6 +222,66 @@ class StepsTest(unittest.TestCase):
         self.assertEqual(out["base"]["commands"], [])
         self.assertEqual(out["dim.channel"]["commands"], [])
         self.assertEqual(out["dim.crm_sync"]["commands"][0], "git switch -c lead-capture-flow/crm-sync main")
+
+
+class CouplingTest(unittest.TestCase):
+    def test_only_the_node_that_needs_both_lanes_is_coupled(self):
+        result = support.run_raw(HOMEPAGE)
+        stack = result.stack
+        # The small imprint lane moves under the start page abstraction ...
+        self.assertEqual(stack.placements["dim.imprint"].parent, "dim.start_page")
+        self.assertEqual(stack.placements["opt.start_page.company"].parent, "opt.imprint.enabled")
+        # ... so the other start pages do not carry imprint code.
+        for nid in ("opt.start_page.about_me", "opt.start_page.news"):
+            self.assertEqual(stack.placements[nid].parent, "dim.start_page")
+            self.assertFalse({"dim.imprint", "opt.imprint.enabled"} & set(chain(stack, nid)))
+
+    def test_expensive_grafts_lose_to_a_later_wave(self):
+        state = {
+            "base": {"status": "merged"},
+            "dim.email_capture": {"status": "merged"},
+            "opt.email_capture.after_test": {"status": "mr-open"},
+        }
+        result = support.run_fixture("lead-capture-flow-html-email.yaml", state=state)
+        ix = result.stack.placements["ix.pdf-after-capture"]
+        self.assertIsNone(ix.parent)
+        self.assertEqual(ix.wave, 1)
+        self.assertEqual(result.stack.placements["dim.pdf_delivery"].parent, "base")
+
+    def test_max_coupling_is_configurable(self):
+        raw = support.load_fixture("lead-capture-flow-html-email.yaml")
+        self.assertIsNotNone(support.run_raw(raw).stack.placements["ix.pdf-after-capture"].parent)
+        raw["stack"] = {"max_coupling": 0}
+        placements = support.run_raw(raw).stack.placements
+        self.assertEqual([p.node for p in placements.values() if p.grafted_for], [])
+        self.assertGreaterEqual(placements["ix.pdf-after-capture"].wave, 1)
+
+
+class PinTest(unittest.TestCase):
+    def test_started_branches_keep_their_recorded_parent(self):
+        # Built with an older layout: the whole start page lane on the enabled imprint.
+        state = {
+            "dim.start_page": {"status": "branched", "onto": "homepage/imprint-enabled"},
+            "opt.imprint.enabled": {"status": "branched", "onto": "homepage/imprint"},
+            "dim.imprint": {"status": "branched", "onto": "homepage/base"},
+            "base": {"status": "branched", "onto": "main"},
+        }
+        placements = support.run_raw(HOMEPAGE, state=state).stack.placements
+        self.assertEqual(placements["dim.start_page"].parent, "opt.imprint.enabled")
+        self.assertEqual(placements["dim.imprint"].parent, "base")
+
+    def test_invalid_pins_are_ignored(self):
+        state = {"opt.start_page.company": {"status": "branched", "onto": "homepage/style"}}
+        placements = support.run_raw(HOMEPAGE, state=state).stack.placements
+        self.assertEqual(placements["opt.start_page.company"].parent, "opt.imprint.enabled")
+
+
+class TitleTest(unittest.TestCase):
+    def test_option_titles_keep_proper_nouns_and_acronyms(self):
+        plan = support.run_raw(HOMEPAGE).plan
+        self.assertEqual(plan.by_id["opt.start_page.company"].title, "Start page: my company (Shopware)")
+        lead = support.run_fixture("lead-capture-flow.yaml").plan
+        self.assertEqual(lead.by_id["opt.channel.landing_page"].title, "Channel: landing page")
 
 
 if __name__ == "__main__":

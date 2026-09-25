@@ -29,7 +29,7 @@ PLAN_FIELDS = (
     "tests", "acceptance", "risk", "complexity", "notes",
 )
 TOP_LEVEL = (
-    "cad", "feature", "project", "title", "summary", "description", "dimensions",
+    "cad", "feature", "title", "summary", "dimensions",
     "constraints", "interactions", "generation", "limits", "stack", "plan", "verify",
 )
 ACRONYMS = {
@@ -174,26 +174,10 @@ def _text(value):
 
 def _parse_options(dim_id, raw, errors):
     options = []
-    items = []
-    if isinstance(raw, dict):
-        for key, value in raw.items():
-            entry = dict(value) if isinstance(value, dict) else {}
-            entry["id"] = key
-            items.append(entry)
-    elif isinstance(raw, list):
-        for item in raw:
-            if isinstance(item, dict) and "id" not in item and len(item) == 1:
-                key, value = next(iter(item.items()))
-                entry = dict(value) if isinstance(value, dict) else {}
-                entry["id"] = key
-                items.append(entry)
-            elif isinstance(item, dict):
-                items.append(dict(item))
-            else:
-                items.append({"id": item})
-    else:
-        errors.append(f"dimensions.{dim_id}: expected a list of options")
+    if not isinstance(raw, list):
+        errors.append(f"dimensions.{dim_id}: expected a list of options, e.g. [a, b] or [{{id: a, label: A}}]")
         return options
+    items = [dict(item) if isinstance(item, dict) else {"id": item} for item in raw]
     seen = set()
     for entry in items:
         oid = entry.get("id")
@@ -213,7 +197,7 @@ def _parse_options(dim_id, raw, errors):
             id=oid,
             label=str(entry.get("label") or humanize(oid)),
             noop=bool(noop) if noop is not None else oid.lower() in NOOP_IDS,
-            summary=_text(entry.get("summary") or entry.get("description")),
+            summary=_text(entry.get("summary")),
         ))
     return options
 
@@ -239,7 +223,7 @@ def load(raw):
         if key not in TOP_LEVEL:
             warnings.append(f"unknown top-level key {key!r}{_suggest(key, TOP_LEVEL)} is ignored")
 
-    feature = raw.get("feature", raw.get("project"))
+    feature = raw.get("feature")
     if not feature:
         errors.append("missing `feature` (a short slug such as lead-capture-flow)")
         feature = "feature"
@@ -248,7 +232,7 @@ def load(raw):
         errors.append(f"feature {feature!r} must be a lowercase slug such as {slugify(feature) or 'my-feature'!r}")
 
     title = str(raw.get("title") or humanize(feature))
-    summary = _text(raw.get("summary") or raw.get("description"))
+    summary = _text(raw.get("summary"))
 
     dimensions = {}
     raw_dims = raw.get("dimensions")
@@ -263,7 +247,7 @@ def load(raw):
         spec_body = body if isinstance(body, dict) and "options" in body else {"options": body}
         if isinstance(body, dict) and "options" in body:
             for key in body:
-                if key not in ("options", "label", "applies_when", "bundle", "summary", "description"):
+                if key not in ("options", "label", "applies_when", "bundle", "summary"):
                     warnings.append(f"dimensions.{dim_id}: unknown key {key!r} is ignored")
         options = _parse_options(dim_id, spec_body.get("options"), errors)
         if not options:
@@ -276,7 +260,7 @@ def load(raw):
             options=options,
             applies_when_text=_text(spec_body.get("applies_when")),
             bundle=bool(spec_body.get("bundle", False)),
-            summary=_text(spec_body.get("summary") or spec_body.get("description")),
+            summary=_text(spec_body.get("summary")),
         )
 
     known = {d.id: d.option_ids for d in dimensions.values()}
@@ -303,8 +287,6 @@ def load(raw):
     for i, item in enumerate(raw_constraints):
         path = f"constraints[{i}]"
         cid = f"C{i + 1}"
-        if isinstance(item, str):
-            item = {"never": item}
         if not isinstance(item, dict):
             errors.append(f"{path}: expected a mapping such as {{if: ..., requires: ...}}")
             continue
@@ -359,9 +341,7 @@ def load(raw):
     if not isinstance(generation, dict):
         errors.append("`generation` must be a mapping such as {mode: pairwise}")
         generation = {}
-    mode = str(generation.get("mode", "exhaustive")).replace("-", "").lower()
-    if mode == "allpairs":
-        mode = "pairwise"
+    mode = str(generation.get("mode", "exhaustive"))
     if mode not in MODES:
         errors.append(f"generation.mode {generation.get('mode')!r} must be one of {', '.join(MODES)}{_suggest(mode, MODES)}")
         mode = "exhaustive"

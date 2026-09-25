@@ -15,6 +15,7 @@ from . import verify as verify_mod
 __version__ = "0.1.0"
 
 
+
 def _fail(message, code=1):
     print(message, file=sys.stderr)
     return code
@@ -25,105 +26,13 @@ def _spec_from(path):
     return spec_mod.load(raw)
 
 
-def result_json(result, doc_path=None):
-    spec, space, sc, plan, stack = result.spec, result.space, result.scenarios, result.plan, result.stack
-    out = {
-        "tool": "combinatorial-agentic-development",
-        "version": __version__,
-        "feature": spec.feature,
-        "title": spec.title,
-        "status": result.status,
-        "mode": spec.mode,
-        "strength": spec.strength,
-        "confirmations": result.confirmations,
-        "suggestions": result.suggestions,
-        "findings": [{"level": f.level, "text": f.text} for f in result.findings],
-    }
-    if space is None:
-        return out
-    out["counts"] = {
-        "theoretical": space.theoretical,
-        "collapsed": space.collapsed,
-        "invalid": space.invalid,
-        "valid": len(space.valid),
-    }
-    out["dimensions"] = [
-        {
-            "id": d.id,
-            "label": d.label,
-            "applies_when": str(d.applies_when) if d.applies_when is not None else None,
-            "options": [
-                {"id": o.id, "label": o.label, "noop": o.noop, "dead": o.id in space.dead_options.get(d.id, [])}
-                for o in d.options
-            ],
-        }
-        for d in spec.dimensions.values()
-    ]
-    out["constraints"] = [
-        {
-            "id": r.constraint.id,
-            "rule": r.constraint.text,
-            "removes": r.removes_alone,
-            "removes_only": r.removes_only,
-            "finding": r.finding or None,
-        }
-        for r in space.reports
-    ]
-    if sc is None:
-        return out
-    out["counts"]["scenarios"] = len(sc.variants)
-    out["coverage"] = {
-        "strength": sc.strength or 2,
-        "possible": sc.possible,
-        "reachable": sc.coverable,
-        "covered": sc.covered,
-    }
-    out["scenarios"] = [
-        {"id": f"T{n:02d}", "variant": dict(zip(space.dims, v))} for n, v in enumerate(sc.variants, 1)
-    ]
-    if plan is None:
-        return out
-    out["counts"]["configurable"] = plan.configurable
-    out["counts"]["nodes"] = len(plan.nodes)
-    out["stack"] = {"layout": stack.layout, "base_branch": stack.base_branch, "lanes": stack.lanes, "waves": stack.waves}
-    nodes = []
-    for nid in stack.order:
-        n = plan.by_id[nid]
-        p = stack.placements[nid]
-        nodes.append({
-            "id": n.id,
-            "kind": n.kind,
-            "title": n.title,
-            "purpose": n.purpose,
-            "decisions": n.decisions,
-            "scope": n.scope,
-            "depends_on": n.depends_on,
-            "components": n.components,
-            "files": n.files,
-            "guidance": n.guidance or render_mod.GUIDANCE[n.kind],
-            "tests": n.tests,
-            "scenarios": n.scenarios,
-            "acceptance": n.acceptance,
-            "risk": n.risk,
-            "complexity": n.complexity,
-            "branch": p.branch,
-            "onto": p.parent_branch,
-            "wave": p.wave + 1,
-            "mr_title": n.title,
-            "mr_description": render_mod.mr_description(spec, n, stack, plan, doc_path),
-            "needs_enrichment": [k for k in ("components", "files") if not getattr(n, k)],
-        })
-    out["nodes"] = nodes
-    return out
-
-
 def cmd_new(args):
     spec_text = None
     if args.spec:
         with open(args.spec, encoding="utf-8") as fh:
             spec_text = fh.read()
         raw = miniyaml.loads(spec_text)
-        feature = args.feature or (raw or {}).get("feature") or (raw or {}).get("project")
+        feature = args.feature or (raw or {}).get("feature")
     else:
         feature = args.feature
     if not feature:
@@ -136,15 +45,12 @@ def cmd_new(args):
 def cmd_analyze(args):
     spec = _spec_from(args.source)
     result = engine.run(spec)
-    if args.json:
-        print(json.dumps(result_json(result, args.source if args.source.endswith(".md") else None), indent=2))
-    else:
-        print(render_mod.receipt(result))
-        if args.variants and result.scenarios is not None:
-            print("\nScenarios")
-            dims = result.space.dims
-            for n, v in enumerate(result.scenarios.variants, 1):
-                print(f"  T{n:02d}  " + "  ".join(f"{d}={x if x is not None else 'n/a'}" for d, x in zip(dims, v)))
+    print(render_mod.receipt(result))
+    if args.variants and result.scenarios is not None:
+        print("\nScenarios")
+        dims = result.space.dims
+        for n, v in enumerate(result.scenarios.variants, 1):
+            print(f"  T{n:02d}  " + "  ".join(f"{d}={x if x is not None else 'n/a'}" for d, x in zip(dims, v)))
     return 1 if result.status == "error" else 0
 
 
@@ -164,6 +70,13 @@ def _repo_for(args):
         return args.repo
     folder = os.path.dirname(os.path.abspath(args.doc))
     return gitops.toplevel(folder) if gitops.is_repo(folder) else None
+
+
+def _display_path(doc, repo):
+    """The document path as people know it: relative to the repository, else to the working directory."""
+    if repo:
+        return os.path.relpath(os.path.realpath(doc), os.path.realpath(repo))
+    return os.path.relpath(doc)
 
 
 def _load_plan(args):
@@ -257,7 +170,7 @@ def cmd_brief(args):
     if node_id not in result.plan.by_id:
         return _fail(f"unknown node {node_id!r}; nodes are: {', '.join(result.stack.order)}")
     start = gitops.base_ref(repo, spec.stack["base_branch"]) if repo else f"origin/{spec.stack['base_branch']}"
-    print(brief_mod.brief(result, node_id, statuses, os.path.relpath(args.doc), start), end="")
+    print(brief_mod.brief(result, node_id, statuses, _display_path(args.doc, repo), start), end="")
     return 0
 
 
@@ -347,7 +260,6 @@ def build_parser():
 
     p = sub.add_parser("analyze", help="count, validate and plan without writing anything")
     p.add_argument("source", help="planning document (.md), YAML or JSON spec")
-    p.add_argument("--json", action="store_true")
     p.add_argument("--variants", action="store_true", help="also list the targeted variants")
     p.set_defaults(func=cmd_analyze)
 

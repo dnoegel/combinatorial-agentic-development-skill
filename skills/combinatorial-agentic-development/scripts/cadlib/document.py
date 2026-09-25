@@ -332,7 +332,7 @@ def render(path, note=None, date=None):
     if followups:
         new_front["followups"] = followups
 
-    content = render_mod.generated_markdown(result, doc_path=os.path.relpath(path))
+    content = render_mod.generated_markdown(result)
     body = _replace_generated(doc.body, content)
     if log:
         body = _add_changelog(body, log)

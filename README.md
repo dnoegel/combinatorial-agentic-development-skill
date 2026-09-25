@@ -2,7 +2,7 @@
 
 **Why choose a product path when you can implement the whole decision space?**
 
-Agent assisted engineering changes the premises on which product teams operate: PRDs, feedback loops, decision cycles can take longer than the actual implementation. 
+Agent-assisted engineering changes the premises on which product teams operate: PRDs, feedback loops, decision cycles can take longer than the actual implementation. 
 An incident of "I created these branches as I tried to anticipate some final decisions" sparked a conversation around "implementing the whole decision tree". 
 
 So here we are. 
@@ -12,7 +12,7 @@ You tell the agent the open decisions. It counts every variant, removes the impo
 
 That's combinatorial agentic development. 
 
-## How it might look like
+## What it might look like
 
 > **You:** Lead capture flow. It runs on the website, a landing page, **or** in checkout. The PDF report goes out by email, as a download, **or** not at all. We capture the email before the test, after it, **or** never. HubSpot sync is optional. PDF by email needs an address, obviously, and checkout can't ask before the test.
 
@@ -91,7 +91,7 @@ Impact
   started work affected: none
 ```
 
-You say yes, and the document gets revision 2 with a changelog entry. See the full documents: [revision 1](examples/lead-capture-flow.md), [revision 2 with work in progress](examples/lead-capture-flow-r2.md), and the [dry-run output](examples/lead-capture-flow.dry-run.txt).
+You say yes, and the document gets revision 2 with a changelog entry. Because the foundation is already merged and now has to accept the new option, the plan adds a follow-up MR instead of rewriting history. See the [full planning document](examples/lead-capture-flow.md).
 
 ## Install
 
@@ -128,9 +128,9 @@ Then talk to your agent: *"Plan the decision space for the onboarding flow: ..."
                                5. branches in stack order  ◄──  4. dry-run stack
 ```
 
-- **The tool computes, the agent judges.** A dependency-free Python script does everything that must be exact: enumeration, constraint checks, dead options, coverage, dependency graph, stack placement, diagrams, restacks. The agent does what needs judgment: turning "emails can be HTML" into a spec change, spotting combinations that are valid but pointless, reading your repository to fill in files and guidance.
-- **Options become code, variants become tests.** One foundation, one abstraction per decision, one implementation per option, plus explicit interaction nodes where options need glue. No copied flows.
-- **One document per feature.** Front matter for state, your intent, the agent's review notes, the canonical spec, a generated plan, a changelog. It renders on GitHub and GitLab, Mermaid included.
+- **Deterministic work in a script.** A dependency-free Python script handles enumeration, constraint checks, dead options, coverage, dependency graph, stack placement, diagrams, restacks. The agent does what needs judgment: turning "emails can be HTML" into a spec change, spotting combinations that are valid but pointless, reading your repository to fill in files and guidance.
+- **One implementation per option.** One foundation, one abstraction per decision, one implementation per option, and explicit interaction nodes where options need glue. Variants are configurations of that code and make up the test matrix.
+- **One document per feature.** Front matter for the branch layout, your intent, the agent's review notes, the canonical spec, a generated plan, a changelog. It renders on GitHub and GitLab, Mermaid included.
 - **Two phases.** Planning ends with your go in the conversation. No branch exists before that, and progress afterwards is read straight from git.
 - **Updates are first class.** Stable node ids, progress read from git, and started branches are never moved silently. When a decision changes the contract of a node that is already merged, the plan gets a follow-up node instead of a history rewrite. When the code of a node changes, `impact` shows the blast radius and `restack` rebases the whole subtree, parents first, replaying only each branch's own commits.
 
@@ -197,7 +197,7 @@ $CAD restack docs/variants/lead-capture-flow.md --execute          # after amend
 
 **Won't 13 MRs annoy my reviewers?** Each one is small and does one thing, and the limits ask before a plan grows past what you configured. `bundle: true` folds a dimension into a single MR.
 
-**Is this a joke?** Absolutely. It is also a commentary on the rapidly changing software development industry, where the line between serious tooling and elaborate satire is becoming increasingly difficult to draw.
+**Is this a joke?** Partly. When an agent builds three variants in the time it takes to schedule the meeting that picks one, building all of them starts to sound reasonable. I haven't decided yet whether that is funny.
 
 ## License
 

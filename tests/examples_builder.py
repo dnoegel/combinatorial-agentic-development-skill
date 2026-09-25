@@ -52,7 +52,7 @@ def _branch(name, parent, message):
 
 
 def build(workdir):
-    """Generate the examples inside `workdir`, return {relative path: content}.
+    """Generate the example inside `workdir`, return {relative path: content}.
 
     Revision 2 is rendered inside a throwaway git repository with some work
     already merged or in progress, because progress is read from git.
@@ -70,13 +70,12 @@ def build(workdir):
         with open(r1, "w", encoding="utf-8") as fh:
             fh.write(text)
         _cli("render", r1, "--note", "Initial plan for the lead capture flow.")
-        dry_run = _cli("stack", r1)
 
         repo = os.path.join(workdir, "repo")
         os.makedirs(os.path.join(repo, "examples"))
-        shutil.copy(r1, os.path.join(repo, "examples", "lead-capture-flow-r2.md"))
+        shutil.copy(r1, os.path.join(repo, "examples", "lead-capture-flow.md"))
         os.chdir(repo)
-        doc = "examples/lead-capture-flow-r2.md"
+        doc = "examples/lead-capture-flow.md"
         _git("init", "-q", "-b", "main")
         _git("config", "user.email", "example@example.com")
         _git("config", "user.name", "Example")
@@ -98,14 +97,10 @@ def build(workdir):
             fh.write(text)
         _set_date("2026-09-28")
         _cli("render", doc, "--note", UPDATE_NOTE)
-        dry_run_r2 = _cli("stack", doc)
         os.chdir(workdir)
-        shutil.copy(os.path.join(repo, doc), "examples/lead-capture-flow-r2.md")
-
-        with open("examples/lead-capture-flow.dry-run.txt", "w", encoding="utf-8") as fh:
-            fh.write(dry_run)
-        with open("examples/lead-capture-flow-r2.dry-run.txt", "w", encoding="utf-8") as fh:
-            fh.write(dry_run_r2)
+        # One example tells the whole story: the initial plan (in the changelog),
+        # a changed decision, and its effect on work that is already merged.
+        shutil.copy(os.path.join(repo, doc), r1)
         out = {}
         for name in sorted(os.listdir("examples")):
             with open(os.path.join("examples", name), encoding="utf-8") as fh:

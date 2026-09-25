@@ -5,7 +5,7 @@ node's scope, where to branch, which files it owns, what it must not touch,
 how to prove it works, and what "done" means. It is deliberately short.
 """
 
-from .render import GUIDANCE
+from .render import GUIDANCE, mr_description
 from .stack import effective_onto
 
 __all__ = ["brief", "next_node", "commit_subject"]
@@ -39,7 +39,6 @@ def brief(result, node_id, statuses, doc_path, start_ref):
     start = start_ref if onto == stack.base_branch else onto
     others = sorted({f for n in plan.nodes if n.id != node_id for f in n.files} - set(node.files))
     test_cmd = spec.verify.get("test", "the project's test command")
-    probe = spec.verify.get("probe")
 
     L = [f"# Brief: `{node_id}`, {node.title}", ""]
     L.append(f"Part of the {spec.title} plan ({doc_path}). Do not edit the plan.")
@@ -71,8 +70,6 @@ def brief(result, node_id, statuses, doc_path, start_ref):
     L += ["## Tests", ""] + [f"- {t}" for t in node.tests]
     L += ["", "## Done when", ""] + [f"- [ ] {a}" for a in node.acceptance]
     L.append(f"- [ ] `{test_cmd}` passes on `{p.branch}`.")
-    if probe:
-        L.append(f"- [ ] The probe (`{probe}`) reports this node's options when they are selected.")
     L += [
         "",
         "## Commit",
@@ -88,5 +85,13 @@ def brief(result, node_id, statuses, doc_path, start_ref):
         "- If something in this brief cannot be done as written, stop and report it instead of working around it.",
         "- To preview everything merged, use `cad.py verify <doc> --integration`; if you create a worktree yourself, remove it before you finish.",
         "- Report: the commit hash, the test output summary, and any deviation from this brief.",
+        "",
+        "## MR description",
+        "",
+        "Use this when the engineer asks for the MR; update Verification with what was actually run.",
+        "",
+        "```markdown",
+        mr_description(spec, node, stack, plan, doc_path),
+        "```",
     ]
     return "\n".join(L) + "\n"

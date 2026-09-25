@@ -5,7 +5,7 @@ The spec is the canonical description of a decision space. It lives in the ```` 
 ## Minimal spec
 
 ```yaml
-feature: lead-capture-flow        # slug, used for branch names (alias: project)
+feature: lead-capture-flow        # slug, used for branch names
 
 dimensions:
   channel: [website, landing_page, checkout]
@@ -61,7 +61,6 @@ constraints:
   - never: <expr>                   # this combination is invalid
     id: no-kiosk                    # default: C1, C2, ...
     reason: Kiosks are out of scope this year.
-  - "channel == kiosk"              # shorthand for never
 
 interactions:                       # glue code where options meet
   - id: pdf-after-capture           # default: slug of title

@@ -36,8 +36,8 @@ class Node:
     tests: list = field(default_factory=list)
     scenarios: list = field(default_factory=list)
     acceptance: list = field(default_factory=list)
-    risk: str = "low"
-    complexity: str = "S"
+    risk: str = ""  # set only through plan enrichment
+    complexity: str = ""
     notes: str = ""
     enriched: set = field(default_factory=set)
     notes_derived: list = field(default_factory=list)  # why dependencies exist
@@ -50,7 +50,6 @@ class Node:
 class Plan:
     nodes: list
     order: list  # node ids in deterministic topological order
-    in_scope: dict  # dim -> options implemented
     out_of_scope: dict  # dim -> options valid but not targeted
     configurable: int  # valid variants buildable from implemented options
     skipped_edges: list = field(default_factory=list)
@@ -81,10 +80,6 @@ def _strip_verb(title):
         if title.startswith(verb):
             return title[len(verb):]
     return title[:1].lower() + title[1:]
-
-
-def _risk(refs):
-    return "low" if refs == 0 else ("medium" if refs <= 2 else "high")
 
 
 def contract(node):
@@ -128,20 +123,6 @@ def build(spec, space, scenarios, followups=None, state=None):
     def scen_ids(pred):
         return [f"T{n + 1:02d}" for n, v in enumerate(targeted) if pred(variant_env(dims, v))]
 
-    refs = {}
-    for c in spec.constraints:
-        for node in (c.when, c.then):
-            if node is None:
-                continue
-            for atom, _ in node.atoms():
-                for value in atom.values:
-                    refs[(atom.dim, value)] = refs.get((atom.dim, value), 0) + 1
-                refs[atom.dim] = refs.get(atom.dim, 0) + 1
-    for ix in spec.interactions:
-        for atom, _ in ix.when.atoms():
-            for value in atom.values:
-                refs[(atom.dim, value)] = refs.get((atom.dim, value), 0) + 1
-
     nodes = []
     base = Node(
         id="base",
@@ -166,8 +147,6 @@ def build(spec, space, scenarios, followups=None, state=None):
             "Every active option leaves a marker in the output (for example `data-cad=\"style=serious\"`), "
             "and the `verify.probe` command prints the markers it observes as `dimension=option`.",
         ],
-        risk="medium",
-        complexity="M",
         contract_extra=[f"rule: {c.text}" for c in spec.constraints]
         + [f"options: {d}: {', '.join(sorted(used[d]))}" for d in dims],
     )
@@ -210,8 +189,6 @@ def build(spec, space, scenarios, followups=None, state=None):
                 f"Selecting any of {', '.join(o.id for o in in_scope)} through configuration works without code changes in callers.",
                 f"The selected `{d}` option is observable in the output, no-op options included (for example `{d}={in_scope[-1].id}`).",
             ] + ([f"All scenarios with {d} set pass."] if dim.bundle else []),
-            risk=_risk(refs.get(d, 0) + (1 if dim.applies_when is not None else 0)),
-            complexity="M" if len(in_scope) > 2 or dim.bundle else "S",
         )
         nodes.append(node)
         dim_nodes[d] = node
@@ -240,12 +217,10 @@ def build(spec, space, scenarios, followups=None, state=None):
                     "Run the contract suite from the abstraction against it.",
                 ],
                 scenarios=scen_ids(lambda env, d=d, o=o.id: env[d] == o),
-                risk=_risk(refs.get((d, o.id), 0)),
-                complexity="S" if refs.get((d, o.id), 0) < 2 else "M",
             )
             node.acceptance = [
-                f"All {len(node.scenarios)} test scenarios with {d} = {o.id} pass.",
-                f"The probe observes `{d}={o.id}` in exactly the scenarios that select it (`cad.py verify --probe`).",
+                f"The {len(node.scenarios)} test scenarios with `{d} = {o.id}` pass, and the probe observes "
+                f"`{d}={o.id}` in exactly those."
             ]
             nodes.append(node)
             option_nodes[(d, o.id)] = node
@@ -266,8 +241,6 @@ def build(spec, space, scenarios, followups=None, state=None):
             tests=["Integration test that exercises the involved options together."],
             scenarios=scen,
             acceptance=[f"All {len(scen)} test scenarios where {ix.when} pass."],
-            risk="high",
-            complexity="M",
         )
         nodes.append(node)
 
@@ -380,8 +353,6 @@ def build(spec, space, scenarios, followups=None, state=None):
             scenarios=list(original.scenarios),
             acceptance=[f"Contract change done: {c}" for c in fu.get("changes", [])]
             + [f"Everything `{original.id}` promised before still holds."],
-            risk=original.risk,
-            complexity="S",
             followup_of=original.id,
             changes=list(fu.get("changes", [])),
         )
@@ -405,14 +376,13 @@ def build(spec, space, scenarios, followups=None, state=None):
 
     order = _topo(nodes)
 
-    in_scope = {d: [o for o in spec.dimensions[d].option_ids if o in used[d]] for d in dims}
     out_scope = {d: [o for o in spec.dimensions[d].option_ids if o in valid_used[d] and o not in used[d]] for d in dims}
     out_scope = {d: v for d, v in out_scope.items() if v}
     configurable = sum(
         1 for v in space.valid if all(value is None or value in used[d] for d, value in zip(dims, v))
     )
     return Plan(
-        nodes=[by_id[i] for i in order], order=order, in_scope=in_scope, out_of_scope=out_scope,
+        nodes=[by_id[i] for i in order], order=order, out_of_scope=out_scope,
         configurable=configurable, skipped_edges=skipped, unknown_enrichment=unknown,
     )
 

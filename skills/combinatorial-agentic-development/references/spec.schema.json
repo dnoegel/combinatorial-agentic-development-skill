@@ -5,6 +5,7 @@
   "description": "Canonical decision space. Stored in a ```yaml cad-spec block of a planning document, or as a standalone YAML/JSON file.",
   "type": "object",
   "required": [
+    "feature",
     "dimensions"
   ],
   "properties": {
@@ -17,17 +18,10 @@
       "pattern": "^[a-z0-9][a-z0-9-]*$",
       "description": "Slug used for branch names."
     },
-    "project": {
-      "type": "string",
-      "description": "Alias for feature."
-    },
     "title": {
       "type": "string"
     },
     "summary": {
-      "type": "string"
-    },
-    "description": {
       "type": "string"
     },
     "dimensions": {
@@ -45,6 +39,9 @@
                 },
                 {
                   "type": "object",
+                  "required": [
+                    "id"
+                  ],
                   "properties": {
                     "id": {
                       "type": "string",
@@ -58,15 +55,8 @@
                     },
                     "summary": {
                       "type": "string"
-                    },
-                    "description": {
-                      "type": "string"
                     }
                   }
-                },
-                {
-                  "type": "object",
-                  "description": "Single-key mapping: option id to details."
                 }
               ]
             },
@@ -79,64 +69,48 @@
             ],
             "properties": {
               "options": {
-                "anyOf": [
-                  {
-                    "type": "array",
-                    "items": {
-                      "anyOf": [
-                        {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "id"
+                      ],
+                      "properties": {
+                        "id": {
                           "type": "string",
                           "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
                         },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string",
-                              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
-                            },
-                            "label": {
-                              "type": "string"
-                            },
-                            "noop": {
-                              "type": "boolean"
-                            },
-                            "summary": {
-                              "type": "string"
-                            },
-                            "description": {
-                              "type": "string"
-                            }
-                          }
+                        "label": {
+                          "type": "string"
                         },
-                        {
-                          "type": "object",
-                          "description": "Single-key mapping: option id to details."
+                        "noop": {
+                          "type": "boolean"
+                        },
+                        "summary": {
+                          "type": "string"
                         }
-                      ]
-                    },
-                    "minItems": 1
-                  },
-                  {
-                    "type": "object",
-                    "description": "Mapping of option id to details (or null)."
-                  }
-                ]
+                      }
+                    }
+                  ]
+                },
+                "minItems": 1
               },
               "label": {
                 "type": "string"
               },
               "applies_when": {
-                "type": "string",
-                "description": "Constraint expression, e.g. `pdf_delivery == email and email_capture != disabled`."
+                "type": "string"
               },
               "bundle": {
                 "type": "boolean"
               },
               "summary": {
-                "type": "string"
-              },
-              "description": {
                 "type": "string"
               }
             }
@@ -147,39 +121,27 @@
     "constraints": {
       "type": "array",
       "items": {
-        "anyOf": [
-          {
-            "type": "string",
-            "description": "Shorthand for `never: <expr>`."
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
           },
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "if": {
-                "type": "string",
-                "description": "Constraint expression, e.g. `pdf_delivery == email and email_capture != disabled`."
-              },
-              "requires": {
-                "type": "string",
-                "description": "Constraint expression, e.g. `pdf_delivery == email and email_capture != disabled`."
-              },
-              "excludes": {
-                "type": "string",
-                "description": "Constraint expression, e.g. `pdf_delivery == email and email_capture != disabled`."
-              },
-              "never": {
-                "type": "string",
-                "description": "Constraint expression, e.g. `pdf_delivery == email and email_capture != disabled`."
-              },
-              "reason": {
-                "type": "string"
-              }
-            }
+          "if": {
+            "type": "string"
+          },
+          "requires": {
+            "type": "string"
+          },
+          "excludes": {
+            "type": "string"
+          },
+          "never": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
           }
-        ]
+        }
       }
     },
     "interactions": {

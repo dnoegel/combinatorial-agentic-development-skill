@@ -4,14 +4,14 @@
     {
       "id": 1,
       "prompt": "I want a personal homepage. Style should be serious, private or funny. It can be static or dynamic. Maybe a guestbook where people can comment, and maybe an imprint, not sure yet. The start page is either about me, about my company, or news in agentic commerce. Plan it in a fresh git repo in ./homepage, TypeScript on Node, no dependencies. Don't push anything.",
-      "expected_output": "A readback with real counts from cad.py analyze (72 theoretical combinations before constraints), proposed constraints named explicitly (for example guestbook requires dynamic rendering), questions with defaults, then a planning document with decision tree, MR stack and test matrix. No branches before sign-off.",
+      "expected_output": "A readback with real counts from cad.py analyze (72 theoretical combinations before constraints), proposed constraints named explicitly (for example guestbook requires dynamic rendering), questions with defaults, then a planning document with decision tree, MR stack and test matrix. No branches before the engineer says go.",
       "files": []
     },
     {
       "id": 2,
-      "prompt": "Here is our plan for the lead capture flow (examples/lead-capture-flow-r2.md). Marketing now also wants SMS delivery of the PDF, but only in checkout. What changes, and which open MRs are affected?",
+      "prompt": "Here is our plan for the lead capture flow (examples/lead-capture-flow.md). Marketing now also wants SMS delivery of the PDF, but only in checkout. What changes, and which open MRs are affected?",
       "expected_output": "A proposed spec change (new option sms on pdf_delivery plus a constraint limiting it to checkout), impact from cad.py analyze and cad.py impact, the effect on started and merged nodes (follow-up for merged base), and no regeneration before confirmation.",
-      "files": ["examples/lead-capture-flow-r2.md"]
+      "files": ["examples/lead-capture-flow.md"]
     },
     {
       "id": 3,

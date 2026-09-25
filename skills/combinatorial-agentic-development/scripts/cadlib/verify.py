@@ -64,9 +64,9 @@ def fork_ref(branch):
     return FORK_REF + branch
 
 
-def record_fork(repo, branch, parent):
+def record_fork(repo, branch, parent, known=None):
     """Remember which parent commit a branch is based on (metadata ref, never a branch)."""
-    tip = gitops.git(repo, "rev-parse", parent).stdout.strip()
+    tip = gitops.git(repo, "rev-parse", parent).stdout.strip() if known is None else known
     gitops.git(repo, "update-ref", fork_ref(branch), tip, check=False)
 
 
@@ -88,31 +88,34 @@ def subtree(stack, node_id):
 
 def check_state(repo, stack, report):
     base = stack.base_branch
-    if not gitops.branch_exists(repo, base):
+    heads = gitops.refs(repo)
+    if base not in heads:
         report.issues.append(Issue("state", None, f"base branch `{base}` does not exist"))
         return
+    merged = gitops.merged_into(repo, base)
+    forks = gitops.refs(repo, FORK_REF)
     for nid in stack.order:
-        p = stack.placements[nid]
-        if not gitops.branch_exists(repo, p.branch):
+        branch = stack.placements[nid].branch
+        if branch not in heads:
             report.nodes[nid] = "planned"
-            continue
-        report.nodes[nid] = "merged" if gitops.is_ancestor(repo, p.branch, base) else "branched"
+        else:
+            report.nodes[nid] = "merged" if branch in merged else "branched"
     stale = []
     for nid in stack.order:
         if report.nodes[nid] != "branched":
             continue
         p = stack.placements[nid]
         parent = _effective_parent(stack, report.nodes, nid)
-        if not gitops.branch_exists(repo, parent):
+        if parent not in heads:
             report.issues.append(Issue(
                 "state", nid, f"`{p.branch}` exists but its parent `{parent}` does not",
                 "create the parent first, or recreate this branch from the right parent",
             ))
             continue
-        if not gitops.is_ancestor(repo, parent, p.branch):
+        if not gitops.is_ancestor(repo, heads[parent], heads[p.branch]):
             stale.append(nid)
-        else:
-            record_fork(repo, p.branch, parent)
+        elif forks.get(p.branch) != heads[parent]:
+            record_fork(repo, p.branch, parent, heads[parent])
     reported = set()
     for nid in stale:
         if nid in reported:
