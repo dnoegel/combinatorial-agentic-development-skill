@@ -46,6 +46,7 @@ Rules for the translation:
 - Name every constraint you add. Never add one silently, even when it is obviously right.
 - Ask only questions whose answer changes the spec, in one batch, each with a default.
 - Options that do nothing (`none`, `disabled`, `off`) are no-ops automatically. Mark others with `noop: true`.
+- For every decision, estimate `coexist` (must several options run side by side in production?) and `size` (is one option a small change or a large one across layers?). The tool derives the delivery from them: toggles in the base branch, or open branches that wait for the decision. Include the result in the readback. See [references/delivery.md](references/delivery.md).
 
 Spec syntax, constraint grammar and every field: [references/spec-format.md](references/spec-format.md).
 
@@ -105,12 +106,15 @@ $CAD verify docs/variants/<feature>.md --integration --probe
 
 **Delegation.** Handing briefs to a cheaper model or a teammate is fine. Give one brief or one lane at a time, then run `verify` yourself. Never report a stack as done based on the implementer's summary.
 
+**Open branches** (decisions delivered as `branch`) are implemented like any node but stay unmerged until their decision is made; `stack` and `brief` mark them. `$CAD compose <doc> <dimension=option ...>` (or `--all`) builds a variant as a branch to check out and look at.
+
 **Progress** lives in git: a branch that exists is started, a branch contained in the base branch is merged. Nothing needs to be recorded by hand.
 
 **Remote operations.** Local branches and commits are fine after the go. Pushing, opening MRs and force-pushing a restack are outward-facing: do them only when the engineer asks. `cad.py brief <doc> <node>` prints a ready MR description for each node.
 
 ## Changes in flight
 
+- **Product decides:** set `decided: <option>` on the dimension and render. The winner merges, `render` lists the losing branches to close, and built toggles get a cleanup node.
 - **The decision space changes:** return to phase 1. `render` reports added and removed nodes, started branches that need a restack or whose contract changed, and plans a follow-up node (`base.r2`) for every merged node whose contract changed.
 - **The code of a node changes:** run `$CAD impact <doc> <node>` first. Amend an open branch, then `$CAD restack <doc> <node>` (add `--execute` to run it locally) and `$CAD verify <doc> --integration --probe --only <node>`.
 - **Never rewrite merged history.** Changes to merged nodes become follow-ups or normal new branches.
@@ -123,7 +127,7 @@ Details: [references/changes.md](references/changes.md), [references/stacking.md
 Plans are built per option. Keep the code shaped the same way:
 
 - **Foundation (`base`):** domain model, one configuration object with a key per dimension, validation that rejects the combinations the constraints remove, a composition root that discovers option modules at runtime, and the probe.
-- **Abstraction (`dim.*`):** one interface per dimension (strategy, adapter, registry, or whatever the codebase already uses), registered by option id. Today's behavior stays the default. No-op options are real implementations.
+- **Abstraction (`dim.*`):** for decisions delivered as toggles, one interface per dimension (strategy, adapter, registry, or whatever the codebase already uses), registered by option id. Today's behavior stays the default. No-op options are real implementations.
 - **Option (`opt.*`):** one implementation plus its registration, and a marker the probe can observe. If the interface must change, that belongs in the abstraction node.
 - **Interaction (`ix.*`):** glue where options meet, kept at the composition root so each option still works alone.
 
@@ -158,6 +162,7 @@ Never describe pairwise or t-wise results as covering every product. The documen
 | `stack <doc> [--json]` | Dry-run git steps in stack order, with progress read from git |
 | `brief <doc> [<node> or --next]` | Self-contained instructions for one node |
 | `verify <doc> [--integration] [--probe] [--only NODE] [--json]` | Compare the plan with git, integration and behavior |
+| `compose <doc> [T03 or dimension=option ...] [--all]` | Build a variant as a branch: shared branches plus its open branches |
 | `impact <doc> <node> [--json]` | Blast radius of changing a node: dependent code, stacked branches, scenarios |
 | `restack <doc> [<node>] [--execute]` | Rebase stale branches and everything built on them, parents first, local only |
 

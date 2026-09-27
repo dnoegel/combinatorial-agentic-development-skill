@@ -44,6 +44,9 @@ class Node:
     contract_extra: list = field(default_factory=list)  # extra lines that define what the node must do
     followup_of: object = None
     changes: list = field(default_factory=list)  # for follow-ups: what changed in the original contract
+    hold: bool = False  # stays on an open branch until its decision is made
+    hold_reason: str = ""
+    applies: object = None  # predicate over a variant env: does this node's code belong in it?
 
 
 @dataclass
@@ -140,6 +143,7 @@ def build(spec, space, scenarios, followups=None, state=None):
             "Configuration tests: every combination removed by a constraint is rejected with a readable message.",
         ],
         scenarios=scen_ids(lambda env: True),
+        applies=lambda env: True,
         acceptance=[
             f"Configuration accepts the {len(space.valid)} valid variants and rejects the {space.invalid} invalid combinations.",
             "Existing behavior is unchanged while no variation point is wired in.",
@@ -157,7 +161,7 @@ def build(spec, space, scenarios, followups=None, state=None):
     for d, dim in spec.dimensions.items():
         in_scope = [o for o in dim.options if o.id in used[d]]
         work = [o for o in in_scope if not o.noop]
-        if not work:
+        if not work or dim.strategy[0] == "branch":
             continue
         noops = [o for o in in_scope if o.noop]
         label = lower_label(dim.label)
@@ -185,6 +189,7 @@ def build(spec, space, scenarios, followups=None, state=None):
             ] if noops else [])
               + ([f"Unit tests for {', '.join(o.id for o in work)}."] if dim.bundle else []),
             scenarios=scen_ids(lambda env, d=d: env[d] is not None),
+            applies=lambda env, d=d: env[d] is not None,
             acceptance=[
                 f"Selecting any of {', '.join(o.id for o in in_scope)} through configuration works without code changes in callers.",
                 f"The selected `{d}` option is observable in the output, no-op options included (for example `{d}={in_scope[-1].id}`).",
@@ -197,12 +202,41 @@ def build(spec, space, scenarios, followups=None, state=None):
                 option_nodes[(d, o.id)] = node
 
     for d, dim in spec.dimensions.items():
-        if d not in dim_nodes or dim.bundle:
+        branch = dim.strategy[0] == "branch"
+        if dim.bundle or (d not in dim_nodes and not branch):
             continue
         for o in dim.options:
             if o.noop or o.id not in used[d]:
                 continue
             label = lower_label(dim.label)
+            if branch:
+                node = Node(
+                    id=f"opt.{d}.{o.id}",
+                    kind="option",
+                    title=f"{dim.label}: {_lower_first(o.label)}",
+                    purpose=o.summary or f"Implement `{d} = {o.id}` end to end, as one complete alternative.",
+                    decisions=[f"{d} = {o.id}"],
+                    scope=(
+                        f"The whole `{o.id}` implementation, across every layer it needs. There is no switch in "
+                        f"the base branch: "
+                        + (f"`{d}` is decided, so this branch merges." if dim.decided
+                           else f"this branch stays open until `{d}` is decided, and only the winner merges.")
+                    ),
+                    depends_on=["base"],
+                    options=[(d, o.id)],
+                    tests=[f"Tests for the `{o.id}` implementation, at every layer it touches."],
+                    scenarios=scen_ids(lambda env, d=d, o=o.id: env[d] == o),
+                    applies=lambda env, d=d, o=o.id: env[d] == o,
+                    hold=not dim.decided,
+                    hold_reason="" if dim.decided else f"`{d}` is undecided",
+                )
+                node.acceptance = [
+                    f"The {len(node.scenarios)} test scenarios with `{d} = {o.id}` pass when this branch is "
+                    f"merged, and the probe observes `{d}={o.id}` in exactly those."
+                ]
+                nodes.append(node)
+                option_nodes[(d, o.id)] = node
+                continue
             node = Node(
                 id=f"opt.{d}.{o.id}",
                 kind="option",
@@ -217,6 +251,7 @@ def build(spec, space, scenarios, followups=None, state=None):
                     "Run the contract suite from the abstraction against it.",
                 ],
                 scenarios=scen_ids(lambda env, d=d, o=o.id: env[d] == o),
+                applies=lambda env, d=d, o=o.id: env[d] == o,
             )
             node.acceptance = [
                 f"The {len(node.scenarios)} test scenarios with `{d} = {o.id}` pass, and the probe observes "
@@ -240,6 +275,7 @@ def build(spec, space, scenarios, followups=None, state=None):
             depends_on=[],
             tests=["Integration test that exercises the involved options together."],
             scenarios=scen,
+            applies=env_pred,
             acceptance=[f"All {len(scen)} test scenarios where {ix.when} pass."],
         )
         nodes.append(node)
@@ -319,6 +355,52 @@ def build(spec, space, scenarios, followups=None, state=None):
                 src.notes_derived.append(f"`{tgt}`: constraint {c.id} ({c.text})")
 
 
+    # Decided toggles: once code for the losing options exists, removing it is planned work.
+    state = state or {}
+    for d, dim in spec.dimensions.items():
+        if not dim.decided or dim.strategy[0] != "toggle":
+            continue
+        losers = [o.id for o in dim.options if o.id != dim.decided and not o.noop]
+        built = [nid for nid in [f"dim.{d}"] + [f"opt.{d}.{o}" for o in losers]
+                 if (state.get(nid) or {}).get("status", "planned") != "planned"]
+        if not losers or not built:
+            continue
+        winner = option_nodes.get((d, dim.decided)) or dim_nodes.get(d)
+        label = lower_label(dim.label)
+        node = Node(
+            id=f"cleanup.{d}",
+            kind="cleanup",
+            title=f"Remove the losing {label} options",
+            purpose=f"`{d}` is decided: `{dim.decided}` stays, {', '.join(f'`{o}`' for o in losers)} go.",
+            decisions=[f"{d} = {dim.decided}"],
+            scope=(
+                f"Delete the implementations, registrations and tests of {', '.join(f'`{o}`' for o in losers)}. "
+                f"If the {label} abstraction only existed for this decision, fold it into `{dim.decided}`."
+            ),
+            depends_on=[winner.id] if winner else ["base"],
+            tests=[f"The `{dim.decided}` scenarios still pass."],
+            scenarios=scen_ids(lambda env, d=d: env[d] is not None),
+            applies=lambda env, d=d: env[d] is not None,
+            acceptance=[f"No code path can select {', '.join(f'`{o}`' for o in losers)} any more."],
+        )
+        nodes.append(node)
+        by_id[node.id] = node
+
+    # Anything that builds on an open branch stays open too.
+    held = {n.id for n in nodes if n.hold}
+    changed = True
+    while changed:
+        changed = False
+        for n in nodes:
+            if n.hold:
+                continue
+            blocker = next((dep for dep in n.depends_on if dep in held), None)
+            if blocker:
+                n.hold = True
+                n.hold_reason = f"builds on `{blocker}`, which stays open until decided"
+                held.add(n.id)
+                changed = True
+
     unknown = []
     for node_id, details in spec.plan.items():
         node = by_id.get(node_id)
@@ -335,7 +417,6 @@ def build(spec, space, scenarios, followups=None, state=None):
             node.enriched.add(key)
 
     # Follow-ups: merged nodes whose contract changed get a new node instead of a rewrite.
-    state = state or {}
     for fu in followups or []:
         original = by_id.get(fu.get("of"))
         if original is None or fu["id"] in by_id:
@@ -354,6 +435,7 @@ def build(spec, space, scenarios, followups=None, state=None):
             acceptance=[f"Contract change done: {c}" for c in fu.get("changes", [])]
             + [f"Everything `{original.id}` promised before still holds."],
             followup_of=original.id,
+            applies=original.applies,
             changes=list(fu.get("changes", [])),
         )
         nodes.append(node)

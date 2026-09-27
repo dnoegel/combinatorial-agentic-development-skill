@@ -48,6 +48,9 @@ def brief(result, node_id, statuses, doc_path, start_ref):
         f"git update-ref refs/cad/base/{p.branch} {start}   # remembers the fork point for later restacks",
         "```", "",
     ]
+    if node.hold:
+        L.append(f"This branch stays open ({node.hold_reason}). Do not merge it; keep it current with `cad.py restack`.")
+        L.append("")
     if p.waits_for:
         L.append(f"Start only after {', '.join(f'`{w}`' for w in p.waits_for)} are merged into `{stack.base_branch}`.")
         L.append("")

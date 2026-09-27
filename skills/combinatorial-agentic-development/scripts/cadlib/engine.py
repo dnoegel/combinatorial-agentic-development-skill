@@ -112,6 +112,13 @@ def run(spec, state=None, followups=None):
                 f"{', '.join(f'`{w}`' for w in p.waits_for)} merged (dependencies sit on separate lanes).",
             ))
 
+    for d, dim in spec.dimensions.items():
+        if dim.strategy[0] == "branch" and not dim.decided:
+            result.findings.append(Finding(
+                "info",
+                f"`{d}` is delivered as open branches ({dim.strategy[1]}). When product decides, set "
+                f"`decided: <option>` on the dimension: the winner merges and the other branches close.",
+            ))
     if not spec.verify.get("probe"):
         result.findings.append(Finding(
             "warning",

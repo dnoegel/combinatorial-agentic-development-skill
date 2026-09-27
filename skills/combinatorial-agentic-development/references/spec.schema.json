@@ -112,6 +112,28 @@
               },
               "summary": {
                 "type": "string"
+              },
+              "coexist": {
+                "type": "boolean",
+                "description": "Must several options run side by side in production?"
+              },
+              "size": {
+                "enum": [
+                  "small",
+                  "large"
+                ],
+                "description": "How big one option's change is."
+              },
+              "delivery": {
+                "enum": [
+                  "toggle",
+                  "branch"
+                ],
+                "description": "Override of the derived delivery strategy."
+              },
+              "decided": {
+                "type": "string",
+                "description": "The winning option, once product has decided."
               }
             }
           }

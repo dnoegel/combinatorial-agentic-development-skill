@@ -41,7 +41,7 @@ Contract snapshots of started nodes live in an HTML comment at the very end of t
 
 1. **Decision space**: the counts table and any confirmation reasons with options.
 2. **Decision tree**: a Mermaid diagram of the valid variants (see below).
-3. **Dimensions**: options with no-op, dead and not-targeted markers, plus `applies_when`.
+3. **Dimensions**: options with no-op, dead and not-targeted markers, `applies_when`, and the delivery (toggle or open branches, with the reason, or the decision once made).
 4. **Constraints**: each rule with how many combinations it removes, how many only it removes, and findings.
 5. **Findings**: tool findings (errors, warnings, info).
 6. **Implementation plan**: node counts, the MR stack diagram, the stack table (merge order), and one collapsible block per node with decisions, scope, dependencies and why they exist, components and files, branch and target, tests, scenarios, and acceptance criteria. MR descriptions come from `cad.py brief`.
@@ -64,6 +64,6 @@ flowchart LR
   n3 -->|"hubspot / none"| done
 ```
 
-**MR stack.** Top-down from the base branch. Node labels are the MR title plus the node id. A dotted edge from the base branch marks a later wave.
+**MR stack.** Top-down from the base branch. Node labels are the MR title plus the node id. A dotted edge from the base branch marks a later wave. Open branches have a dashed border.
 
 Diagrams use only flowchart syntax with quoted labels, so GitHub, GitLab and most Markdown viewers render them.

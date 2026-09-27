@@ -15,7 +15,7 @@ Redundant edges are removed (transitive reduction). A git branch has one parent,
 
 Placement respects progress. Merged nodes count as part of the base branch. A branch that already exists keeps the parent it was built on (recorded as `onto` in the front matter) as long as that parent still covers its dependencies, and lanes with started work are never grafted elsewhere.
 
-Merge order is the order of the stack table. Parents always come first.
+Merge order is the order of the stack table. Parents always come first. Open branches (decisions delivered as `branch`, see [delivery.md](delivery.md)) are placed like other nodes but not merged until their decision is made, and nothing that merges is ever stacked on them.
 
 ## Dry run
 

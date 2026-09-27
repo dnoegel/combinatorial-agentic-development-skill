@@ -1,0 +1,25 @@
+# A large decision (the checkout itself) delivered as open branches, next to
+# small decisions delivered as toggles.
+feature: checkout-redesign
+title: Checkout redesign
+
+dimensions:
+  checkout:
+    options: [one_page, multi_step]
+    coexist: false
+    size: large
+  payment_ui:
+    options: [embedded, redirect]
+    size: small
+  upsell:
+    options: [enabled, none]
+    size: small
+
+constraints:
+  - if: checkout == one_page
+    excludes: payment_ui == redirect
+
+interactions:
+  - id: upsell-one-page
+    when: checkout == one_page and upsell == enabled
+    title: Show the upsell inside the one page checkout

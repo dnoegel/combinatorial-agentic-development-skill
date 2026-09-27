@@ -43,7 +43,7 @@ def tuples_of(variant, t):
 
 
 def possible_tuples(spec, t):
-    sizes = [len(d.options) for d in spec.dimensions.values()]
+    sizes = [len(d.live_options) for d in spec.dimensions.values()]
     total = 0
     for combo in itertools.combinations(range(len(sizes)), t):
         count = 1

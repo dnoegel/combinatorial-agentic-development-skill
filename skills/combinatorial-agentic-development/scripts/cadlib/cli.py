@@ -6,6 +6,7 @@ import os
 import sys
 
 from . import brief as brief_mod
+from . import compose as compose_mod
 from . import plan as plan_mod
 from . import restack as restack_mod
 from . import document, engine, gitops, miniyaml, render as render_mod, stack as stack_mod
@@ -242,6 +243,49 @@ def cmd_impact(args):
     return 0
 
 
+def _variants_from_args(result, args):
+    dims = result.space.dims
+    targeted = result.scenarios.variants
+    if args.all:
+        return list(targeted)
+    ids = {f"T{i:02d}": v for i, v in enumerate(targeted, 1)}
+    if len(args.choice) == 1 and args.choice[0] in ids:
+        return [ids[args.choice[0]]]
+    chosen = {}
+    for item in args.choice:
+        dim, sep, value = item.partition("=")
+        if not sep or dim not in dims:
+            raise document.DocError(f"expected a scenario id such as T03 or dimension=option pairs, got {item!r}")
+        chosen[dim] = value
+    for v in result.space.valid:
+        if {d: x for d, x in zip(dims, v) if x is not None} == chosen:
+            return [v]
+    raise document.DocError("not a valid variant; run `cad.py analyze <doc> --variants` for the list")
+
+
+def cmd_compose(args):
+    doc, spec, state, result, repo = _load_plan(args)
+    if not repo:
+        return _fail("compose needs a git repository (use --repo).")
+    dims = result.space.dims
+    code = 0
+    for variant in _variants_from_args(result, args):
+        name, merged, problems = compose_mod.compose(repo, result, variant)
+        label = " ".join(f"{d}={v}" for d, v in zip(dims, variant) if v is not None)
+        if problems:
+            code = 1
+            print(f"FAIL   {label}")
+            for p in problems:
+                print(f"       {p}")
+            continue
+        toggles = " ".join(f"{d}={v}" for d, v in zip(dims, variant)
+                           if v is not None and spec.dimensions[d].strategy[0] == "toggle")
+        print(f"ok     {name}  ({len(merged)} branches merged)")
+        if toggles:
+            print(f"       configure: {toggles}")
+    return code
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="cad.py",
@@ -290,6 +334,13 @@ def build_parser():
     p.add_argument("--repo")
     p.add_argument("--execute", action="store_true", help="run the rebases locally (stops at the first conflict)")
     p.set_defaults(func=cmd_restack)
+
+    p = sub.add_parser("compose", help="build a variant as a branch: shared branches plus its open branches")
+    p.add_argument("doc")
+    p.add_argument("choice", nargs="*", help="a scenario id (T03) or dimension=option pairs")
+    p.add_argument("--all", action="store_true", help="compose every targeted scenario")
+    p.add_argument("--repo")
+    p.set_defaults(func=cmd_compose)
 
     p = sub.add_parser("impact", help="what a change to a node affects")
     p.add_argument("doc")

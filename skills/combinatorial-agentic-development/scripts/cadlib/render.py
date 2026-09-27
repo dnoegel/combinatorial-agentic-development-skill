@@ -47,6 +47,10 @@ GUIDANCE = {
         "Keep the glue at the composition root or in a small coordinator, so each option still "
         "works without the other."
     ),
+    "cleanup": (
+        "Remove the losing options completely: code, registration, configuration values and tests. "
+        "Keep the change reviewable by leaving the winner untouched."
+    ),
     "followup": (
         "Change only what the contract changes list. The original node is merged, so this is a normal "
         "new commit on top of the base branch; never rewrite merged history."
@@ -58,6 +62,7 @@ RISK_TEXT = {
     "option": "Isolated to one option behind an interface.",
     "interaction": "Couples options; regressions only show up in combined scenarios.",
     "followup": "Changes code that is already merged and that other nodes build on.",
+    "cleanup": "Deletes code that some configurations used; check that nothing still selects it.",
 }
 
 
@@ -149,6 +154,10 @@ def stack_diagram(plan, stack):
             lines.append(f"  {base} --> {sid}")
         else:
             lines.append(f"  s_{_mid(p.parent)} --> {sid}")
+    held = [f"s_{_mid(n)}" for n in stack.order if by_id[n].hold]
+    if held:
+        lines.append("  classDef open stroke-dasharray:5 4")
+        lines.append(f"  class {','.join(held)} open")
     return "\n".join(lines)
 
 
@@ -165,6 +174,8 @@ def mr_description(spec, node, stack, plan, doc_path=None):
     where = f" ({doc_path})" if doc_path else ""
     lines.append(f"- Part of the {spec.title} decision space{where}, node `{node.id}`.")
     lines += ["", "## Stack"]
+    if node.hold:
+        lines.append(f"- Stays open: {node.hold_reason}. Merge only if this option wins.")
     if p.parent:
         lines.append(f"- Based on `{p.parent_branch}` ({parent}). Merge that first.")
     elif p.waits_for:
@@ -178,6 +189,23 @@ def mr_description(spec, node, stack, plan, doc_path=None):
         lines.append(f"- Scenarios to cover: {_scenario_list(node.scenarios)}.")
     lines += ["", "## Risks", f"- {node.risk.capitalize() + ': ' if node.risk else ''}{RISK_TEXT[node.kind]}"]
     return "\n".join(lines)
+
+
+def _delivery_cell(dim):
+    strategy, reason = dim.strategy
+    if dim.decided:
+        return f"decided: `{dim.decided}` ({strategy})"
+    return f"{strategy}: {reason}"
+
+
+def delivery_summary(spec):
+    groups = {}
+    for d, dim in spec.dimensions.items():
+        label = f"{d} = {dim.decided}" if dim.decided else d
+        key = "decided" if dim.decided else dim.strategy[0]
+        groups.setdefault(key, []).append(label)
+    names = {"toggle": "toggle", "branch": "branch (stays open until decided)", "decided": "decided"}
+    return "; ".join(f"{names[k]}: {', '.join(v)}" for k, v in groups.items())
 
 
 def _scenario_list(ids, limit=8):
@@ -224,6 +252,7 @@ def receipt(result):
             + (f", {_n(kinds.count('followup'), 'follow-up')}" if kinds.count('followup') else "")
         )
         out.append(f"Configurable       {plan.configurable} of {len(space.valid)} valid variants")
+        out.append(f"Delivery           {delivery_summary(spec)}")
         st = result.stack
         out.append(f"Stack              {st.layout}, {_n(st.lanes, 'lane')}, {_n(st.waves, 'wave')}")
     out.append("")
@@ -250,6 +279,8 @@ def receipt(result):
             p = result.stack.placements[nid]
             onto = p.parent or result.stack.base_branch
             extra = f"  (wave {p.wave + 1})" if p.wave else ""
+            if plan.by_id[nid].hold:
+                extra += "  (stays open)"
             out.append(f"  {nid:<{width}}on {onto}{extra}")
         out.append("")
     if result.findings:
@@ -295,6 +326,8 @@ def _node_block(result, node, number):
         ("Components and files", ", ".join(node.components + [f"`{f}`" for f in node.files]) or PLACEHOLDER),
         ("Branch", f"`{p.branch}` onto {onto}"),
     ]
+    if node.hold:
+        rows.append(("Merge", f"stays open: {node.hold_reason}"))
     if node.risk or node.complexity:
         rows.insert(-1, ("Risk / complexity", " / ".join(x for x in (node.risk, node.complexity) if x)))
     lines = [
@@ -357,7 +390,7 @@ def generated_markdown(result):
         L.append("_Omitted: the reduced decision tree has more than 60 nodes. The tables below are complete._")
     L.append("")
 
-    L += ["### Dimensions", "", "| Dimension | Options | Applies when |", "|---|---|---|"]
+    L += ["### Dimensions", "", "| Dimension | Options | Applies when | Delivery |", "|---|---|---|---|"]
     for d, dim in spec.dimensions.items():
         cells = []
         for o in dim.options:
@@ -370,7 +403,7 @@ def generated_markdown(result):
                 text += " (not targeted)"
             cells.append(text)
         when = f"`{dim.applies_when}`" if dim.applies_when is not None else "always"
-        L.append(f"| {dim.label} (`{d}`) | {', '.join(cells)} | {when} |")
+        L.append(f"| {dim.label} (`{d}`) | {', '.join(cells)} | {when} | {_delivery_cell(dim)} |")
     L.append("")
 
     if spec.constraints:
@@ -406,6 +439,8 @@ def generated_markdown(result):
     for n, nid in enumerate(stack.order, 1):
         p = stack.placements[nid]
         onto = f"`{p.parent_branch}`" + (f" (wave {p.wave + 1})" if p.wave else "")
+        if plan.by_id[nid].hold:
+            onto += ", stays open"
         L.append(f"| {n} | `{nid}` | `{p.branch}` | {onto} |")
     L.append("")
     L.append(
@@ -416,7 +451,7 @@ def generated_markdown(result):
 
     L += ["### Nodes", "", "Default guidance, unless a node says otherwise:", ""]
     for kind, label in (("base", "Foundation"), ("dimension", "Abstractions"), ("option", "Options"),
-                        ("interaction", "Interactions"), ("followup", "Follow-ups")):
+                        ("interaction", "Interactions"), ("followup", "Follow-ups"), ("cleanup", "Cleanups")):
         if kind in kinds:
             L.append(f"- **{label}:** {GUIDANCE[kind]}")
     L.append("")

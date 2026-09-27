@@ -130,6 +130,7 @@ Then talk to your agent: *"Plan the decision space for the onboarding flow: ..."
 
 - **Deterministic work in a script.** A dependency-free Python script handles enumeration, constraint checks, dead options, coverage, dependency graph, stack placement, diagrams, restacks. The agent does what needs judgment: turning "emails can be HTML" into a spec change, spotting combinations that are valid but pointless, reading your repository to fill in files and guidance.
 - **One implementation per option.** One foundation, one abstraction per decision, one implementation per option, and explicit interaction nodes where options need glue. Variants are configurations of that code and make up the test matrix.
+- **Toggles or open branches, per decision.** Small options, or options that must run side by side, merge behind configuration. Large alternatives where exactly one will win, say two checkout implementations across API, backend and frontend, stay on open branches that are kept current and never touch the base branch until someone decides. `compose` builds any variant as a branch you can check out, and once a decision is written into the spec, the winner merges and the rest is closed or cleaned up.
 - **One document per feature.** Front matter for the branch layout, your intent, the agent's review notes, the canonical spec, a generated plan, a changelog. It renders on GitHub and GitLab, Mermaid included.
 - **Two phases.** Planning ends with your go in the conversation. No branch exists before that, and progress afterwards is read straight from git.
 - **Updates are first class.** Stable node ids, progress read from git, and started branches are never moved silently. When a decision changes the contract of a node that is already merged, the plan gets a follow-up node instead of a history rewrite. When the code of a node changes, `impact` shows the blast radius and `restack` rebases the whole subtree, parents first, replaying only each branch's own commits.
@@ -187,6 +188,7 @@ $CAD render docs/variants/lead-capture-flow.md --note "Initial plan."
 $CAD stack docs/variants/lead-capture-flow.md                # dry run, progress read from git
 $CAD brief docs/variants/lead-capture-flow.md --next         # instructions for the next node
 $CAD verify docs/variants/lead-capture-flow.md --integration --probe
+$CAD compose docs/variants/lead-capture-flow.md T03          # a variant as a branch to check out
 $CAD impact docs/variants/lead-capture-flow.md dim.email_capture   # what a change would touch
 $CAD restack docs/variants/lead-capture-flow.md --execute          # after amending a branch
 ```
@@ -194,6 +196,8 @@ $CAD restack docs/variants/lead-capture-flow.md --execute          # after amend
 ## FAQ
 
 **Does it really build all 42 products?** It builds every option once, behind interfaces, so all 42 are configurable. Which of them get a dedicated test scenario depends on the mode.
+
+**How do I look at one variant?** `cad.py compose <doc> T03` builds it as a branch. The branches in the stack are there so each piece can be reviewed on its own; which options a variant uses is decided by configuration for toggles and by merging the chosen open branches for large alternatives.
 
 **Won't 13 MRs annoy my reviewers?** Each one is small and does one thing, and the limits ask before a plan grows past what you configured. `bundle: true` folds a dimension into a single MR.
 

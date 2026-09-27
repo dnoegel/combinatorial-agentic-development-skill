@@ -69,6 +69,8 @@ class GitRepoCase(unittest.TestCase):
     the slowest part of these tests.
     """
 
+    spec_text = SPEC
+
     @classmethod
     def setUpClass(cls):
         cls._template = tempfile.TemporaryDirectory()
@@ -81,7 +83,7 @@ class GitRepoCase(unittest.TestCase):
         doc = os.path.join(repo, "docs", "variants", "shop.md")
         os.environ["CAD_DATE"] = "2026-09-23"
         try:
-            document.create(doc, "shop", spec_text=SPEC)
+            document.create(doc, "shop", spec_text=cls.spec_text)
             document.render(doc)
         finally:
             os.environ.pop("CAD_DATE", None)

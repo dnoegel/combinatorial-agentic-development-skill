@@ -83,6 +83,7 @@ def place(plan, layout="tree", base_branch="main", prefix="", state=None, max_co
     merged = {n for n, v in state.items() if (v or {}).get("status") == "merged"}
     started = {n for n, v in state.items() if (v or {}).get("status") in ("branched", "mr-open")}
     deps = {n.id: list(n.depends_on) for n in plan.nodes}
+    held = {n.id for n in plan.nodes if n.hold}
     rank = {nid: i for i, nid in enumerate(plan.order)}
     parent = {}
     wave = {}
@@ -131,6 +132,8 @@ def place(plan, layout="tree", base_branch="main", prefix="", state=None, max_co
             moved = subtree(root, par)
             if any(m in started for m in moved):
                 return None
+            if any(x in held for x in tip_chain) and any(m not in held for m in moved):
+                return None  # work that merges must never sit on a branch that stays open
             base_chain = set(tip_chain)
             for m in moved:
                 path = {x for x in chain(m, par) if x in moved}
@@ -302,5 +305,7 @@ def steps(plan, stack, state, remote=True):
                 f"git update-ref refs/cad/base/{p.branch} {_q(start)}",
                 f"# implement {nid} (cad.py brief <doc> {nid}), run its tests, commit",
             ]
+            if plan.by_id[nid].hold:
+                entry["commands"].append(f"# keep open, do not merge: {plan.by_id[nid].hold_reason}")
         out.append(entry)
     return out

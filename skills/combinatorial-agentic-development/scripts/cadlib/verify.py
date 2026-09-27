@@ -16,6 +16,7 @@ refs under refs/cad/base/, which remember each branch's fork point so restacks
 replay exactly the branch's own commits.
 """
 
+import contextlib
 import json
 import os
 import shlex
@@ -25,6 +26,7 @@ import tempfile
 from dataclasses import dataclass, field
 
 from . import gitops
+from .space import variant_env
 
 __all__ = ["Issue", "Report", "run", "observed_tokens"]
 
@@ -147,46 +149,133 @@ def _tail(text, lines=12):
     return "\n".join(rows[-lines:])
 
 
-def check_integration(repo, stack, report, test_cmd, keep_worktree=False):
-    """Merge every existing branch in stack order into a temporary worktree."""
-    base = stack.base_branch
+@contextlib.contextmanager
+def temp_worktree(repo, start):
+    """A throwaway detached worktree; the caller's checkout is never touched."""
     tmp = tempfile.mkdtemp(prefix="cad-verify-")
     path = os.path.join(tmp, "worktree")
-    gitops.git(repo, "worktree", "add", "--detach", path, base)
+    gitops.git(repo, "worktree", "add", "--detach", path, start)
     try:
-        merged = []
-        for nid in stack.order:
-            if report.nodes.get(nid) != "branched":
-                continue
-            branch = stack.placements[nid].branch
-            proc = gitops.git(path, "merge", "--no-ff", "--no-edit", "-m", f"verify: merge {branch}", branch, check=False)
-            if proc.returncode != 0:
-                files = gitops.git(path, "diff", "--name-only", "--diff-filter=U", check=False).stdout.split()
-                gitops.git(path, "merge", "--abort", check=False)
-                report.issues.append(Issue(
-                    "integration", nid,
-                    f"`{branch}` conflicts with the branches merged before it"
-                    + (f" in {', '.join(f'`{f}`' for f in files)}" if files else ""),
-                    "move shared code into a common ancestor node, or discover modules at runtime "
-                    "so parallel branches never edit the same file",
-                ))
-                continue
-            merged.append(branch)
-        report.notes.append(f"integration: merged {len(merged)} branch(es) into a temporary worktree")
-        if test_cmd:
-            proc = _run(test_cmd, path)
-            if proc.returncode != 0:
-                report.issues.append(Issue(
-                    "integration", None,
-                    f"`{test_cmd}` fails with all branches merged:\n{_tail(proc.stdout + proc.stderr)}",
-                ))
-            else:
-                report.notes.append(f"integration: `{test_cmd}` passes with all branches merged")
-        return path
+        yield path
     finally:
-        if not keep_worktree:
-            gitops.git(repo, "worktree", "remove", "--force", path, check=False)
-            shutil.rmtree(tmp, ignore_errors=True)
+        gitops.git(repo, "worktree", "remove", "--force", path, check=False)
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def merge_branch(path, branch):
+    """Merge a branch into the worktree. Returns None on success, else the conflicting files."""
+    proc = gitops.git(path, "merge", "--no-ff", "--no-edit", "-m", f"verify: merge {branch}", branch, check=False)
+    if proc.returncode == 0:
+        return None
+    files = gitops.git(path, "diff", "--name-only", "--diff-filter=U", check=False).stdout.split()
+    gitops.git(path, "merge", "--abort", check=False)
+    return files
+
+
+def merge_shared(path, result, statuses, report):
+    """Merge every existing branch that is meant for the base branch (everything except open branches)."""
+    merged = []
+    for nid in result.stack.order:
+        if statuses.get(nid) != "branched" or result.plan.by_id[nid].hold:
+            continue
+        branch = result.stack.placements[nid].branch
+        files = merge_branch(path, branch)
+        if files is not None:
+            report.issues.append(Issue(
+                "integration", nid,
+                f"`{branch}` conflicts with the branches merged before it"
+                + (f" in {', '.join(f'`{f}`' for f in files)}" if files else ""),
+                "move shared code into a common ancestor node, or discover modules at runtime "
+                "so parallel branches never edit the same file",
+            ))
+            continue
+        merged.append(branch)
+    return merged
+
+
+def open_nodes_for(result, variant):
+    """Open branches whose code belongs in `variant`, in stack order."""
+    env = variant_env(result.space.dims, variant)
+    return [nid for nid in result.stack.order
+            if result.plan.by_id[nid].hold and result.plan.by_id[nid].applies and result.plan.by_id[nid].applies(env)]
+
+
+def _describe(dims, variant):
+    return " ".join(f"{d}={v}" for d, v in zip(dims, variant) if v is not None)
+
+
+def check_integration(repo, result, report, test_cmd, probe_cmd, scenarios):
+    """Merge the stack into a temporary worktree, then test and probe.
+
+    Without open branches everything is merged once. With open branches every
+    scenario is composed on its own: the shared branches plus the open
+    branches of the options it selects, because alternatives of one decision
+    are allowed to conflict with each other.
+    """
+    dims = result.space.dims
+    with temp_worktree(repo, result.stack.base_branch) as path:
+        merged = merge_shared(path, result, report.nodes, report)
+        report.notes.append(f"integration: merged {len(merged)} branch(es) into a temporary worktree")
+        if not any(n.hold for n in result.plan.nodes):
+            if test_cmd:
+                proc = _run(test_cmd, path)
+                if proc.returncode != 0:
+                    report.issues.append(Issue(
+                        "integration", None,
+                        f"`{test_cmd}` fails with all branches merged:\n{_tail(proc.stdout + proc.stderr)}",
+                    ))
+                else:
+                    report.notes.append(f"integration: `{test_cmd}` passes with all branches merged")
+            if probe_cmd:
+                _report_probe(report, [_probe_one(path, sid, dims, v, probe_cmd) for sid, v in scenarios])
+            return
+        head = gitops.git(path, "rev-parse", "HEAD").stdout.strip()
+        probed, composed, skipped, failed_tests = [], 0, [], []
+        for sid, variant in scenarios:
+            needed = open_nodes_for(result, variant)
+            missing = [n for n in needed if report.nodes.get(n) != "branched"]
+            if missing:
+                skipped.append(sid)
+                continue
+            gitops.git(path, "reset", "-q", "--hard", head)
+            gitops.git(path, "clean", "-qfdx", check=False)
+            conflict = False
+            for nid in needed:
+                branch = result.stack.placements[nid].branch
+                files = merge_branch(path, branch)
+                if files is not None:
+                    report.issues.append(Issue(
+                        "integration", nid,
+                        f"{sid} ({_describe(dims, variant)}): `{branch}` conflicts"
+                        + (f" in {', '.join(f'`{f}`' for f in files)}" if files else ""),
+                        "open branches of different decisions must merge cleanly together",
+                    ))
+                    conflict = True
+                    break
+            if conflict:
+                continue
+            composed += 1
+            if test_cmd:
+                proc = _run(test_cmd, path)
+                if proc.returncode != 0:
+                    failed_tests.append(sid)
+                    if len(failed_tests) <= 3:
+                        report.issues.append(Issue(
+                            "integration", None,
+                            f"`{test_cmd}` fails for {sid} ({_describe(dims, variant)}):\n{_tail(proc.stdout + proc.stderr, 8)}",
+                        ))
+            if probe_cmd:
+                probed.append(_probe_one(path, sid, dims, variant, probe_cmd))
+        report.notes.append(f"integration: composed and checked {composed} scenario(s) with their open branches")
+        if test_cmd and composed and not failed_tests:
+            report.notes.append(f"integration: `{test_cmd}` passes in every composed scenario")
+        if skipped:
+            report.notes.append(
+                f"{len(skipped)} scenario(s) not checked yet because an open branch they need does not exist: "
+                + ", ".join(skipped)
+            )
+        if probe_cmd:
+            _report_probe(report, probed)
 
 
 def observed_tokens(text):
@@ -199,44 +288,45 @@ def observed_tokens(text):
     return out
 
 
-def check_probe(cwd, spec, scenarios, dims, report, probe_cmd):
+def _probe_one(cwd, sid, dims, variant, probe_cmd):
+    payload = {d: v for d, v in zip(dims, variant)}
+    expected = {(d, v) for d, v in payload.items() if v is not None}
+    data = json.dumps(payload, sort_keys=True)
+    proc = _run(probe_cmd, cwd, env=dict(os.environ, CAD_VARIANT=data), stdin=data, timeout=120)
+    if proc.returncode != 0:
+        return {"sid": sid, "payload": payload, "error": _tail(proc.stderr or proc.stdout, 6)}
+    seen = {t for t in observed_tokens(proc.stdout) if t[0] in payload}
+    return {"sid": sid, "payload": payload, "missing": expected - seen, "unexpected": seen - expected}
+
+
+def _report_probe(report, results):
     failures = {}
-    failing_variants = 0
-    errors = 0
-    for sid, variant in scenarios:
-        payload = {d: v for d, v in zip(dims, variant)}
-        expected = {(d, v) for d, v in payload.items() if v is not None}
-        env = dict(os.environ, CAD_VARIANT=json.dumps(payload, sort_keys=True))
-        proc = _run(probe_cmd, cwd, env=env, stdin=json.dumps(payload, sort_keys=True), timeout=120)
-        if proc.returncode != 0:
+    failing = errors = 0
+    for r in results:
+        if "error" in r:
             errors += 1
+            failing += 1
             if errors <= 3:
-                report.issues.append(Issue(
-                    "probe", None, f"probe failed for {sid} {payload}:\n{_tail(proc.stderr or proc.stdout, 6)}",
-                ))
-            failing_variants += 1
+                report.issues.append(Issue("probe", None, f"probe failed for {r['sid']} {r['payload']}:\n{r['error']}"))
             continue
-        seen = {t for t in observed_tokens(proc.stdout) if t[0] in payload}
-        missing = expected - seen
-        wrong = {t for t in seen if t not in expected}
-        if missing or wrong:
-            failing_variants += 1
-        for d, v in missing:
-            failures.setdefault(("missing", d, v), []).append(sid)
-        for d, v in wrong:
-            failures.setdefault(("unexpected", d, v), []).append(sid)
+        if r["missing"] or r["unexpected"]:
+            failing += 1
+        for d, v in r["missing"]:
+            failures.setdefault(("missing", d, v), []).append(r["sid"])
+        for d, v in r["unexpected"]:
+            failures.setdefault(("unexpected", d, v), []).append(r["sid"])
     for (kind, d, v), ids in sorted(failures.items(), key=lambda kv: (-len(kv[1]), kv[0])):
-        node = f"opt.{d}.{v}"
+        listed = ", ".join(ids[:5]) + (" ..." if len(ids) > 5 else "")
         if kind == "missing":
-            text = f"`{d}={v}` is selected in {len(ids)} scenario(s) but the probe never observes it ({', '.join(ids[:5])}{' ...' if len(ids) > 5 else ''})"
+            text = f"`{d}={v}` is selected in {len(ids)} scenario(s) but the probe never observes it ({listed})"
             fix = "wire the option into the product (registration, discovery, composition root) and emit its marker"
         else:
-            text = f"the probe observes `{d}={v}` in {len(ids)} scenario(s) that did not select it ({', '.join(ids[:5])}{' ...' if len(ids) > 5 else ''})"
+            text = f"the probe observes `{d}={v}` in {len(ids)} scenario(s) that did not select it ({listed})"
             fix = "the option leaks into variants that did not choose it; check defaults and fallbacks"
-        report.issues.append(Issue("probe", node, text, fix))
-    report.probe = {"scenarios": len(scenarios), "failing": failing_variants, "errors": errors}
-    if not failing_variants:
-        report.notes.append(f"probe: all {len(scenarios)} scenarios show exactly their selected options")
+        report.issues.append(Issue("probe", f"opt.{d}.{v}", text, fix))
+    report.probe = {"scenarios": len(results), "failing": failing, "errors": errors}
+    if results and not failing:
+        report.notes.append(f"probe: all {len(results)} scenarios show exactly their selected options")
 
 
 def check_hygiene(repo, result, report):
@@ -296,13 +386,7 @@ def run(repo, result, integration=False, probe=False, only=None):
         report.issues.append(Issue("probe", None, "no `verify.probe` command in the spec", "add one; see references/verification.md"))
         probe = False
     if integration:
-        path = check_integration(repo, stack, report, test_cmd, keep_worktree=probe)
-        if probe:
-            try:
-                check_probe(path, spec, scenarios, result.space.dims, report, probe_cmd)
-            finally:
-                gitops.git(repo, "worktree", "remove", "--force", path, check=False)
-                shutil.rmtree(os.path.dirname(path), ignore_errors=True)
+        check_integration(repo, result, report, test_cmd, probe_cmd if probe else None, scenarios)
     elif probe:
-        check_probe(repo, spec, scenarios, result.space.dims, report, probe_cmd)
+        _report_probe(report, [_probe_one(repo, sid, result.space.dims, v, probe_cmd) for sid, v in scenarios])
     return report

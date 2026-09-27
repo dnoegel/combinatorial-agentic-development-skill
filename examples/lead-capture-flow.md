@@ -192,13 +192,13 @@ Every path from left to right is one valid variant. Branches with identical cont
 
 ### Dimensions
 
-| Dimension | Options | Applies when |
-|---|---|---|
-| Channel (`channel`) | `website`, `landing_page`, `checkout` | always |
-| PDF delivery (`pdf_delivery`) | `email`, `download`, `none` (no-op) | always |
-| Email capture (`email_capture`) | `before_test`, `after_test`, `disabled` (no-op) | always |
-| CRM sync (`crm_sync`) | `hubspot`, `none` (no-op) | always |
-| Email format (`email_format`) | `html`, `text` | `pdf_delivery == email` |
+| Dimension | Options | Applies when | Delivery |
+|---|---|---|---|
+| Channel (`channel`) | `website`, `landing_page`, `checkout` | always | toggle: default (set coexist and size to let the tool choose) |
+| PDF delivery (`pdf_delivery`) | `email`, `download`, `none` (no-op) | always | toggle: default (set coexist and size to let the tool choose) |
+| Email capture (`email_capture`) | `before_test`, `after_test`, `disabled` (no-op) | always | toggle: default (set coexist and size to let the tool choose) |
+| CRM sync (`crm_sync`) | `hubspot`, `none` (no-op) | always | toggle: default (set coexist and size to let the tool choose) |
+| Email format (`email_format`) | `html`, `text` | `pdf_delivery == email` | toggle: default (set coexist and size to let the tool choose) |
 
 ### Constraints
 

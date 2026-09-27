@@ -64,7 +64,7 @@ class Space:
 
 
 def theoretical_count(spec):
-    return prod(len(d.options) for d in spec.dimensions.values())
+    return prod(len(d.live_options) for d in spec.dimensions.values())
 
 
 def variant_env(dims, variant):
@@ -93,7 +93,7 @@ def analyze(spec):
     seen = set()
     valid = []
     invalid = 0
-    lists = [d.option_ids for d in spec.dimensions.values()]
+    lists = [d.live_ids for d in spec.dimensions.values()]
     for combo in itertools.product(*lists):
         env = normalize(spec, dict(zip(dims, combo)))
         key = tuple(env[d] for d in dims)
@@ -124,10 +124,10 @@ def analyze(spec):
         if valid and not used:
             space.dead_dimensions.append(dim.id)
             continue
-        dead = [o for o in dim.option_ids if o not in used]
+        dead = [o for o in dim.live_ids if o not in used]
         if valid and dead:
             space.dead_options[dim.id] = dead
-        if len(used) == 1 and len(dim.options) > 1:
+        if len(used) == 1 and len(dim.live_options) > 1:
             space.forced[dim.id] = next(iter(used))
 
     for ix in spec.interactions:

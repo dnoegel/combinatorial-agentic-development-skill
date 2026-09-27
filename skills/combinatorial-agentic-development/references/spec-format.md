@@ -42,6 +42,12 @@ dimensions:
   crm_sync:
     options: [hubspot, none]
     bundle: true                    # abstraction and options in one MR
+  checkout:
+    options: [one_page, multi_step]
+    coexist: false                  # must several options run side by side in production?
+    size: large                     # small | large; with coexist this picks the delivery
+    delivery: branch                # optional override: toggle | branch (see delivery.md)
+    decided: one_page               # once product has decided
   email_format:
     options: [html, text]
     applies_when: pdf_delivery == email   # conditional dimension

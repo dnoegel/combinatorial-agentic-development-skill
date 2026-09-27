@@ -88,10 +88,36 @@ class Dimension:
     applies_when_text: str = ""
     bundle: bool = False
     summary: str = ""
+    coexist: object = None  # must several options run side by side in production?
+    size: str = ""  # small | large: how big and how spread out one option is
+    delivery: str = ""  # explicit toggle | branch, overrides the rule
+    decided: str = ""  # the winning option, once product has decided
 
     @property
     def option_ids(self):
         return [o.id for o in self.options]
+
+    @property
+    def live_options(self):
+        """Options still in play: only the winner once the dimension is decided."""
+        return [o for o in self.options if o.id == self.decided] if self.decided else list(self.options)
+
+    @property
+    def live_ids(self):
+        return [o.id for o in self.live_options]
+
+    @property
+    def strategy(self):
+        """(toggle|branch, reason). Toggles live in main behind configuration; branches stay open until decided."""
+        if self.delivery:
+            return self.delivery, "set explicitly"
+        if self.coexist:
+            return "toggle", "several options run side by side in production"
+        if self.size == "large":
+            return "branch", "exactly one option will win and each one is a large change"
+        if self.size == "small":
+            return "toggle", "the options are small"
+        return "toggle", "default (set coexist and size to let the tool choose)"
 
     def option(self, option_id):
         for opt in self.options:
@@ -247,7 +273,8 @@ def load(raw):
         spec_body = body if isinstance(body, dict) and "options" in body else {"options": body}
         if isinstance(body, dict) and "options" in body:
             for key in body:
-                if key not in ("options", "label", "applies_when", "bundle", "summary"):
+                if key not in ("options", "label", "applies_when", "bundle", "summary",
+                               "coexist", "size", "delivery", "decided"):
                     warnings.append(f"dimensions.{dim_id}: unknown key {key!r} is ignored")
         options = _parse_options(dim_id, spec_body.get("options"), errors)
         if not options:
@@ -261,7 +288,24 @@ def load(raw):
             applies_when_text=_text(spec_body.get("applies_when")),
             bundle=bool(spec_body.get("bundle", False)),
             summary=_text(spec_body.get("summary")),
+            coexist=spec_body.get("coexist"),
+            size=str(spec_body.get("size") or ""),
+            delivery=str(spec_body.get("delivery") or ""),
+            decided=str(spec_body.get("decided") or ""),
         )
+        dim = dimensions[dim_id]
+        if dim.coexist is not None and not isinstance(dim.coexist, bool):
+            errors.append(f"dimensions.{dim_id}.coexist must be true or false")
+        if dim.size not in ("", "small", "large"):
+            errors.append(f"dimensions.{dim_id}.size must be small or large")
+        if dim.delivery not in ("", "toggle", "branch"):
+            errors.append(f"dimensions.{dim_id}.delivery must be toggle or branch")
+        if dim.decided and dim.decided not in dim.option_ids:
+            errors.append(
+                f"dimensions.{dim_id}.decided: {dim.decided!r} is not an option{_suggest(dim.decided, dim.option_ids)}"
+            )
+        if dim.bundle and dim.strategy[0] == "branch":
+            errors.append(f"dimensions.{dim_id}: bundle and branch delivery exclude each other")
 
     known = {d.id: d.option_ids for d in dimensions.values()}
     earlier = []
